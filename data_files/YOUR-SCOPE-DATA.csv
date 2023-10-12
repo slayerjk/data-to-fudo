@@ -1,0 +1,2 @@
+SCOPE1,Windows Server 2008 R2,stnd_win2008R2,10.*.*.*,SW,,"USER1, USER2, USER3",
+SCOPE2,ESXI,esxi-srv-1,10.*.*.*,SW,"USER1, USER2, USER3",,"USER1, USER2, USER3"
