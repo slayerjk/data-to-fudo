@@ -78,10 +78,11 @@ with open(mailing_data, encoding='utf-8') as file:
 # VA PROJECT REGARDING DATA
 
 # SERVERS FILES
-servers_file = f'{data_files}/YOUR-SCOPE-DATA.csv'
+# servers_file = f'{script_data}/KIA-PCI-HV.csv'
+servers_file = f'{data_files}/KIA_TEST-DATA.csv'
 
 # OPERATORS FILE
-operators_file = f'{data_files}/YOUR-OPERATORS-DATA.csv'
+operators_file = f'{data_files}/Operators.csv'
 
 # CONNECTION DATA
 data_file = f'{data_files}/con-data'
@@ -91,17 +92,21 @@ with open(data_file, 'r') as file:
     data = [string.strip() for string in file.readlines() if len(string) > 0]
     fudo_base_url = data[0]
     fudo_bind_ip = data[1]
-    fudo_auth_creds = {
-        'username': data[2],
-        'password': data[3]
-    }
-    acc_pwd = data[4]
+
+    # USERNAME & PASSWORD DEPRECATED IN FUDO 5.4, USE API KEY
+    # fudo_auth_creds = {
+    #     'username': data[2],
+    #     'password': data[3]
+    # }
+
+    fudo_api_key = data[2]
+    acc_pwd = data[3]
     # zone: dc-ip
     dcs = {
-        'DOMAIN1': data[5].split('|'),
-        'DOMAIN2': data[6].split('|'),
-        'DOMAIN3': data[7].split('|'),
-        'DOMAIN4': data[8].split('|'),
+        'DOM1': data[4].split('|'),
+        'DOM2': data[5].split('|'),
+        'DOM3': data[6].split('|'),
+        'DOM4': data[7].split('|'),
     }
 
 
@@ -112,7 +117,7 @@ fudo_proxies = {
 }
 
 fudo_headers = {
-    'Content-Type': 'Application/JSON'
+    'Authorization': fudo_api_key
 }
 
 # FUDO URL PARAMETERES
@@ -120,7 +125,8 @@ common_url_parameters = '?fields=id,name'
 server_url_parameters = '?fields=id,name,address,protocol'
 
 # FUDO URLS
-fudo_auth_url = f'{fudo_base_url}/api/system/login'
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_auth_url = f'{fudo_base_url}/api/system/login'
 
 fudo_server_url = f'{fudo_base_url}/api/v2/server{server_url_parameters}'
 fudo_account_url = f'{fudo_base_url}/api/v2/account{common_url_parameters}'
