@@ -8,12 +8,17 @@ from time import perf_counter
 from app_scripts.project_helper import check_file, check_create_dir, func_decor, files_rotate
 
 from project_static import appname, data_files, start_date_n_time, logging, logs_dir, servers_file, data_file,\
-    fudo_auth_url, fudo_headers, fudo_proxies, fudo_auth_creds, fudo_server_url, fudo_pools_url, dcs, acc_pwd,\
-    fudo_account_url, fudo_safe_url, fudo_user_url, fudo_listener_url, logs_to_keep
+    fudo_headers, fudo_proxies, fudo_server_url, fudo_pools_url, dcs, acc_pwd, fudo_account_url, fudo_safe_url,\
+    fudo_user_url, fudo_listener_url, logs_to_keep, fudo_account_safe_listener_url, fudo_user_to_safe_assignment_url
 
-from app_scripts.fudo_functions import get_sessionid, post_data_to_fudo, parse_n_set_server_data, get_fudo_data,\
+from app_scripts.fudo_functions import post_data_to_fudo, parse_n_set_server_data, get_fudo_data,\
     set_pools_data, parse_n_set_account_data, set_accounts_changers, set_safes, set_user_to_safe_assignment,\
     set_asl_assignment
+
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# from project_static import fudo_auth_url, fudo_auth_creds
+# from app_scripts.fudo_functions import get_sessionid
+
 
 # MAILING IMPORTS
 # from app_scripts.project_static import mailing_data, smtp_server, smtp_port, smtp_login, smtp_pass, smtp_from_addr,\
@@ -50,7 +55,8 @@ func_decor(f'checking {data_file} exists', 'crit')(check_file)(data_file)
 
 
 # GET FUDO SESSIONID
-sessionid = get_sessionid(fudo_auth_url, fudo_headers, fudo_proxies, fudo_auth_creds)
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# sessionid = get_sessionid(fudo_auth_url, fudo_headers, fudo_proxies, fudo_auth_creds)
 
 
 # PARSE AND SET SERVERS DATA FILE
@@ -67,7 +73,9 @@ servers_failed = []
 servers_succeeded = []
 for server in result_parse_server_data:
     try:
-        post_data_to_fudo(fudo_server_url, fudo_proxies, sessionid, server)
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_server_url, fudo_proxies, sessionid, server)
+        post_data_to_fudo(fudo_server_url, fudo_proxies, fudo_headers, server)
     except Exception as e:
         servers_failed.append((server["name"]))
         logging.error(f'\nFAILED: CREATING SERVER({server["name"]}), CHECK STATUS CODE/ERROR({e})\n')
@@ -91,16 +99,22 @@ logging.info('\nDONE: JOB REPORT - CREATE SERVER\n')
 
 
 # GET FUDO SERVERS LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_servers_list = (func_decor('getting actual FUDO Servers list', 'crit')
+#                      (get_fudo_data)(fudo_server_url, sessionid, fudo_proxies))
 fudo_servers_list = (func_decor('getting actual FUDO Servers list', 'crit')
-                     (get_fudo_data)(fudo_server_url, sessionid, fudo_proxies))
+                      (get_fudo_data)(fudo_server_url, fudo_headers, fudo_proxies))
 # logging.info('Current list of Servers in Fudo:')
 # for server in fudo_servers_list:
 #     logging.info(server)
 
 
 # GET FUDO POOLS LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_pools_list = (func_decor('getting actual FUDO Pools list', 'crit')
+#                    (get_fudo_data)(fudo_pools_url, sessionid, fudo_proxies))
 fudo_pools_list = (func_decor('getting actual FUDO Pools list', 'crit')
-                   (get_fudo_data)(fudo_pools_url, sessionid, fudo_proxies))
+                   (get_fudo_data)(fudo_pools_url, fudo_headers, fudo_proxies))
 logging.info('Current list of Pools in Fudo:')
 for pool in fudo_pools_list:
     logging.info(pool)
@@ -125,7 +139,9 @@ else:
     pool_assignment_succeeded = []
     for pool_assignment in result_set_pool_assignment_data:
         try:
-            post_data_to_fudo(fudo_pools_server_url, fudo_proxies, sessionid, pool_assignment)
+            # DEPRECATED IN FUDO 5.4, USE API KEY
+            # post_data_to_fudo(fudo_pools_server_url, fudo_proxies, sessionid, pool_assignment)
+            post_data_to_fudo(fudo_pools_server_url, fudo_proxies, fudo_headers, pool_assignment)
         except Exception as e:
             pool_assignment_failed.append((pool_assignment["server_id"]))
             logging.error(f'\nFAILED: CREATING POOL ASSIGNMENTS({pool_assignment["server_id"]}), '
@@ -177,7 +193,9 @@ accounts_changer_failed = []
 accounts_changer_succeeded = []
 for account in result_set_accounts_changers:
     try:
-        post_data_to_fudo(fudo_account_url, fudo_proxies, sessionid, account)
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_account_url, fudo_proxies, sessionid, account)
+        post_data_to_fudo(fudo_account_url, fudo_proxies, fudo_headers, account)
     except Exception as e:
         accounts_changer_failed.append((account["name"]))
         logging.error(f'\nFAILED: CREATING account({account["name"]}), CHECK STATUS CODE/ERROR({e})\n')
@@ -203,8 +221,11 @@ logging.info('\nDONE: JOB REPORT - CREATE ACCOUNT CHANGER\n')
 
 
 # GET FUDO ACCOUNT LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
+#                       (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
 fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
-                      (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
+                      (get_fudo_data)(fudo_account_url, fudo_headers, fudo_proxies))
 # logging.info('Current list of Accounts in Fudo:')
 # for account in fudo_accounts_list:
 #     logging.info(account)
@@ -225,7 +246,9 @@ accounts_failed = []
 accounts_succeeded = []
 for account in result_parse_account_data:
     try:
-        post_data_to_fudo(fudo_account_url, fudo_proxies, sessionid, account)
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_account_url, fudo_proxies, sessionid, account)
+        post_data_to_fudo(fudo_account_url, fudo_proxies, fudo_headers, account)
     except Exception as e:
         accounts_failed.append((account["name"]))
         logging.error(f'\nFAILED: CREATING account({account["name"]}), CHECK STATUS CODE/ERROR({e})\n')
@@ -248,8 +271,11 @@ logging.info('\nDONE: JOB REPORT - CREATE ACCOUNT\n')
 
 
 # GET FUDO ACCOUNT LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
+#                       (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
 fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
-                      (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
+                      (get_fudo_data)(fudo_account_url, fudo_headers, fudo_proxies))
 # logging.info('Current list of Accounts in Fudo:')
 # for account in fudo_accounts_list:
 #     logging.info(account)
@@ -269,7 +295,9 @@ safes_failed = []
 safes_succeeded = []
 for safe in result_set_safes:
     try:
-        post_data_to_fudo(fudo_safe_url, fudo_proxies, sessionid, safe)
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_safe_url, fudo_proxies, sessionid, safe)
+        post_data_to_fudo(fudo_safe_url, fudo_proxies, fudo_headers, safe)
     except Exception as e:
         safes_failed.append((safe["name"]))
         logging.error(f'\nFAILED: CREATING Safe({safe["name"]}), CHECK STATUS CODE/ERROR({e})\n')
@@ -293,16 +321,22 @@ logging.info('\nDONE: JOB REPORT - CREATE SAFE\n')
 
 
 # GET FUDO SAFE LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_safes_list = ((func_decor)('geting Fudo actual Safe list', 'crit')
+#                    (get_fudo_data)(fudo_safe_url, sessionid, fudo_proxies))
 fudo_safes_list = ((func_decor)('geting Fudo actual Safe list', 'crit')
-                   (get_fudo_data)(fudo_safe_url, sessionid, fudo_proxies))
+                   (get_fudo_data)(fudo_safe_url, fudo_headers, fudo_proxies))
 # logging.info('Current list of Safes in Fudo:')
 # for safe in fudo_safes_list:
 #     logging.info(safe)
 
 
 # GET FUDO USER LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_users_list = ((func_decor)('geting Fudo actual User list', 'crit')
+#                    (get_fudo_data)(fudo_user_url, sessionid, fudo_proxies))
 fudo_users_list = ((func_decor)('geting Fudo actual User list', 'crit')
-                   (get_fudo_data)(fudo_user_url, sessionid, fudo_proxies))
+                   (get_fudo_data)(fudo_user_url, fudo_headers, fudo_proxies))
 # logging.info('Current list of Users in Fudo:')
 # for user in fudo_users_list:
 #     logging.info(user)
@@ -323,7 +357,9 @@ user_to_safe_assignments_failed = []
 user_to_safe_assignments_succeeded = []
 for assignment in result_set_user_to_safe_assignment:
     try:
-        post_data_to_fudo(fudo_user_to_safe_assignment_url, fudo_proxies, sessionid, assignment[1])
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_user_to_safe_assignment_url, fudo_proxies, sessionid, assignment[1])
+        post_data_to_fudo(fudo_user_to_safe_assignment_url, fudo_proxies, fudo_headers, assignment[1])
     except Exception as e:
         user_to_safe_assignments_failed.append((assignment[0]))
         logging.error(f'\nFAILED: CREATING USER TO SAFE ASSIGNMENT({assignment[0]}), '
@@ -350,8 +386,11 @@ logging.info('\nDONE: JOB - CREATING USER TO SAFE ASSIGNMENT\n')
 
 
 # GET FUDO LISTENERS LIST
+# DEPRECATED IN FUDO 5.4, USE API KEY
+# fudo_listeners_list = ((func_decor)('geting Fudo actual Listeners list', 'crit')
+#                        (get_fudo_data)(fudo_listener_url, sessionid, fudo_proxies))
 fudo_listeners_list = ((func_decor)('geting Fudo actual Listeners list', 'crit')
-                       (get_fudo_data)(fudo_listener_url, sessionid, fudo_proxies))
+                       (get_fudo_data)(fudo_listener_url, fudo_headers, fudo_proxies))
 logging.info('Current list of Listener in Fudo:')
 for listener in fudo_listeners_list:
     logging.info(listener)
@@ -372,7 +411,9 @@ asl_assignments_failed = []
 asl_assignments_succeeded = []
 for assignment in result_set_asl_assignment:
     try:
-        post_data_to_fudo(fudo_account_safe_listener_url, fudo_proxies, sessionid, assignment[1])
+        # DEPRECATED IN FUDO 5.4, USE API KEY
+        # post_data_to_fudo(fudo_account_safe_listener_url, fudo_proxies, sessionid, assignment[1])
+        post_data_to_fudo(fudo_account_safe_listener_url, fudo_proxies, fudo_headers, assignment[1])
     except Exception as e:
         asl_assignments_failed.append((assignment[0]))
         logging.error(f'\nFAILED: CREATING A-S-L ASSIGNMENT({assignment[0]}), '
