@@ -6,13 +6,14 @@ from project_static import fudo_bind_ip
 
 
 # FUNCTION: GET SESSIONID FOR REQUESTS
-@func_decor('getting Fudo sessionID', 'crit')
-def get_sessionid(url, headers, proxies, ses_data):
-    response = requests.post(url, headers=headers, proxies=proxies, json=ses_data, verify=False)
-    if response.status_code == 200:
-        return {'Authorization': response.json()['sessionid']}
-    else:
-        raise Exception(response.status_code)
+# !!! DEPRECATED IN 5.4 USE API KEY !!!
+# @func_decor('getting Fudo sessionID', 'crit')
+# def get_sessionid(url, headers, proxies, ses_data):
+#     response = requests.post(url, headers=headers, proxies=proxies, json=ses_data, verify=False)
+#     if response.status_code == 200:
+#         return {'Authorization': response.json()['sessionid']}
+#     else:
+#         raise Exception(response.status_code)
 
 
 # FUNCTION: PARSE AND PREPARE SERVERS DATA FROM INPUT CSV
