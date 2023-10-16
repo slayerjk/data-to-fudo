@@ -1,6 +1,8 @@
 # data-to-fudo
 This script automatizes routine of adding Accounts, Servers, Safes, Operators to FUDO PAM
 
+Use for FUDO PAM 5.4 and later!
+
 Data to Fudo
 
 Script is aumtomatization of:
