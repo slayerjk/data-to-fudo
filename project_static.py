@@ -78,8 +78,7 @@ with open(mailing_data, encoding='utf-8') as file:
 # VA PROJECT REGARDING DATA
 
 # SERVERS FILES
-# servers_file = f'{script_data}/KIA-PCI-HV.csv'
-servers_file = f'{data_files}/KIA_TEST-DATA.csv'
+servers_file = f'{data_files}/PKI.csv'
 
 # OPERATORS FILE
 operators_file = f'{data_files}/Operators.csv'
@@ -103,12 +102,25 @@ with open(data_file, 'r') as file:
     acc_pwd = data[3]
     # zone: dc-ip
     dcs = {
-        'DOM1': data[4].split('|'),
-        'DOM2': data[5].split('|'),
-        'DOM3': data[6].split('|'),
-        'DOM4': data[7].split('|'),
+        'DOMAIN1': data[4].split('|'),
+        'DOMAIN2': data[5].split('|'),
+        'DOMAIN3': data[6].split('|'),
+        'DOMAIN4': data[7].split('|'),
     }
 
+# USERNAME & PASSWORD DEPRECATED IN FUDO 5.4, USE API AUTH
+fudo_auth_creds = {
+    'username': '<api-user?',
+    'password': '<password>'
+}
+fudo_headers = {
+    'Content-Type': 'application/json'
+}
+
+# FUDO API AUTH
+# fudo_auth_headers = {
+#     'Authorization': fudo_api_key
+# }
 
 # FUDO REQUESTS DATA ###
 fudo_proxies = {
@@ -116,17 +128,14 @@ fudo_proxies = {
     'https': None
 }
 
-fudo_headers = {
-    'Authorization': fudo_api_key
-}
-
 # FUDO URL PARAMETERES
 common_url_parameters = '?fields=id,name'
 server_url_parameters = '?fields=id,name,address,protocol'
 
 # FUDO URLS
+
 # DEPRECATED IN FUDO 5.4, USE API KEY
-# fudo_auth_url = f'{fudo_base_url}/api/system/login'
+fudo_auth_url = f'{fudo_base_url}/api/system/login'
 
 fudo_server_url = f'{fudo_base_url}/api/v2/server{server_url_parameters}'
 fudo_account_url = f'{fudo_base_url}/api/v2/account{common_url_parameters}'
