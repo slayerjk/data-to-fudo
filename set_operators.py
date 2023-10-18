@@ -7,17 +7,20 @@ from time import perf_counter
 # IMPORT PROJECTS PARTS
 from app_scripts.project_helper import files_rotate, check_file, check_create_dir, func_decor
 
-from project_static import appname, data_files, start_date_n_time, logging, logs_dir, logs_to_keep,\
-    operators_file, data_file, fudo_headers, fudo_proxies, fudo_server_url, fudo_account_url, fudo_safe_url,\
-    fudo_user_url, fudo_modify_user_url, fudo_grant_access_user_url, fudo_grant_access_safe_url,\
+from project_static import appname, data_files, start_date_n_time, logging, logs_dir, logs_to_keep, \
+    operators_file, data_file, fudo_proxies, fudo_server_url, fudo_account_url, fudo_safe_url, \
+    fudo_user_url, fudo_modify_user_url, fudo_grant_access_user_url, fudo_grant_access_safe_url, \
     fudo_grant_access_account_url, fudo_grant_access_server_url
 
-from app_scripts.fudo_functions import post_data_to_fudo, get_fudo_data, parse_operators_file, modify_fudo_user,\
+from app_scripts.fudo_functions import post_data_to_fudo, get_fudo_data, parse_operators_file, modify_fudo_user, \
     set_operators, set_grants_for_operator
 
-# DEPRECATED IN FUDO 5.4, USE API KEY
-# from project_static import fudo_auth_url, fudo_auth_creds
-# from app_scripts.fudo_functions import get_sessionid
+# FUDO API AUTH
+# from project_static import fudo_auth_headers
+
+# DEPRECATED IN FUDO 5.4, USE API AUTH
+from project_static import fudo_auth_url, fudo_auth_creds, fudo_headers
+from app_scripts.fudo_functions import get_sessionid
 
 # MAILING IMPORTS
 # from app_scripts.project_static import mailing_data, smtp_server, smtp_port, smtp_login, smtp_pass, smtp_from_addr,\
@@ -63,15 +66,16 @@ logging.info('SUCCEDED: getting Operators data\n')
 
 # GET FUDO SESSIONID
 # DEPRECATED IN FUDO 5.4, USE API KEY
-# sessionid = get_sessionid(fudo_auth_url, fudo_headers, fudo_proxies, fudo_auth_creds)
+sessionid = get_sessionid(fudo_auth_url, fudo_headers, fudo_proxies, fudo_auth_creds)
 
 
 # GET FUDO USER LIST
 # DEPRECATED IN FUDO 5.4, USE API KEY
+fudo_users_list = (func_decor('geting Fudo actual User list', 'crit')
+                   (get_fudo_data)(fudo_user_url, sessionid, fudo_proxies))
 # fudo_users_list = ((func_decor)('geting Fudo actual User list', 'crit')
-#                    (get_fudo_data)(fudo_user_url, sessionid, fudo_proxies))
-fudo_users_list = ((func_decor)('geting Fudo actual User list', 'crit')
-                   (get_fudo_data)(fudo_user_url, fudo_headers, fudo_proxies))
+#                    (get_fudo_data)(fudo_user_url, fudo_headers, fudo_proxies))
+
 # logging.info('Current list of Users in Fudo:')
 # for user in fudo_users_list:
 #     logging.info(user)
@@ -92,8 +96,9 @@ operator_patch_failed = []
 for user in fudo_operators:
     try:
         # DEPRECATED IN FUDO 5.4, USE API KEY
-        # modify_fudo_user(fudo_modify_user_url, fudo_proxies, sessionid, user['id'])
-        modify_fudo_user(fudo_modify_user_url, fudo_proxies, fudo_headers, user['id'])
+        modify_fudo_user(fudo_modify_user_url, fudo_proxies, sessionid, user['id'])
+        # modify_fudo_user(fudo_modify_user_url, fudo_proxies, fudo_headers, user['id'])
+
     except Exception as e:
         operator_patch_failed.append(user)
         logging.exception(f'FAILED: PATCHING USERS TO BE OPERATOR({e})')
@@ -116,7 +121,7 @@ logging.info('\nDONE: JOB REPORT - PATCHING USERS\n')
 
 
 # SET USERS FOR OPERATORS
-fudo_users_for_operators = ((func_decor)('setting grants Users for Operators', 'crit')
+fudo_users_for_operators = (func_decor('setting grants Users for Operators', 'crit')
                             (set_grants_for_operator)('users', fudo_operators, operators_data, fudo_users_list))
 total_fudo_users_for_operators = len(fudo_users_for_operators)
 logging.info('Current Data of Users for Operators:')
@@ -131,8 +136,9 @@ grant_user_succeeded = []
 for data in fudo_users_for_operators:
     try:
         # DEPRECATED IN FUDO 5.4, USE API KEY
-        # post_data_to_fudo(fudo_grant_access_user_url, fudo_proxies, sessionid, data)
-        post_data_to_fudo(fudo_grant_access_user_url, fudo_proxies, fudo_headers, data)
+        post_data_to_fudo(fudo_grant_access_user_url, fudo_proxies, sessionid, data)
+        # post_data_to_fudo(fudo_grant_access_user_url, fudo_proxies, fudo_headers, data)
+
     except Exception as e:
         grant_user_failed.append(data)
         logging.error(f'\nFAILED: GRANTING USERS({data}), CHECK STATUS CODE/ERROR({e})\n')
@@ -157,17 +163,18 @@ logging.info('\nDONE: JOB REPORT - GRANTING OPERATORS ACCESS TO USERS\n')
 
 # GET FUDO SAFE LIST
 # DEPRECATED IN FUDO 5.4, USE API KEY
+fudo_safes_list = (func_decor('geting Fudo actual Safe list', 'crit')
+                   (get_fudo_data)(fudo_safe_url, sessionid, fudo_proxies))
 # fudo_safes_list = ((func_decor)('geting Fudo actual Safe list', 'crit')
-#                    (get_fudo_data)(fudo_safe_url, sessionid, fudo_proxies))
-fudo_safes_list = ((func_decor)('geting Fudo actual Safe list', 'crit')
-                   (get_fudo_data)(fudo_safe_url, fudo_headers, fudo_proxies))
+#                    (get_fudo_data)(fudo_safe_url, fudo_headers, fudo_proxies))
+
 logging.info('Current list of Safes in Fudo:')
 # for safe in fudo_safes_list:
 #     logging.info(safe)
 
 
 # SET SAFES FOR OPERATORS
-fudo_safes_for_operators = ((func_decor)('setting grants Safes for Operators', 'crit')
+fudo_safes_for_operators = (func_decor('setting grants Safes for Operators', 'crit')
                             (set_grants_for_operator)('safes', fudo_operators, operators_data, fudo_safes_list))
 total_fudo_safes_for_operators = len(fudo_safes_for_operators)
 # logging.info('Current Data of Safes for Operators:')
@@ -182,8 +189,9 @@ grant_safes_succeeded = []
 for data in fudo_safes_for_operators:
     try:
         # DEPRECATED IN FUDO 5.4, USE API KEY
-        # post_data_to_fudo(fudo_grant_access_safe_url, fudo_proxies, sessionid, data)
-        post_data_to_fudo(fudo_grant_access_safe_url, fudo_proxies, fudo_headers, data)
+        post_data_to_fudo(fudo_grant_access_safe_url, fudo_proxies, sessionid, data)
+        # post_data_to_fudo(fudo_grant_access_safe_url, fudo_proxies, fudo_headers, data)
+
     except Exception as e:
         grant_safes_failed.append(data)
         logging.error(f'\nFAILED: GRANTING SAFES({data}), CHECK STATUS CODE/ERROR({e})\n')
@@ -208,18 +216,19 @@ logging.info('\nDONE: JOB REPORT - GRANTING OPERATORS ACCESS TO SAFES\n')
 
 # GET FUDO ACCOUNTS LIST
 # DEPRECATED IN FUDO 5.4, USE API KEY
+fudo_accounts_list = (func_decor('geting Fudo actual Accounts list', 'crit')
+                      (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
 # fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
-#                       (get_fudo_data)(fudo_account_url, sessionid, fudo_proxies))
-fudo_accounts_list = ((func_decor)('geting Fudo actual Accounts list', 'crit')
-                      (get_fudo_data)(fudo_account_url, fudo_headers, fudo_proxies))
+#                       (get_fudo_data)(fudo_account_url, fudo_headers, fudo_proxies))
+
 # logging.info('Current list of Accounts in Fudo:')
 # for account in fudo_accounts_list:
 #     logging.info(account)
 
 
 # SET ACCOUNTS FOR OPERATORS
-fudo_accounts_for_operators = ((func_decor)('setting Accounts for Operators', 'crit')
-                               (set_grants_for_operator)('accounts', fudo_operators, operators_data, fudo_accounts_list))
+fudo_accounts_for_operators = (func_decor('setting Accounts for Operators', 'crit')(set_grants_for_operator)
+                               ('accounts', fudo_operators, operators_data, fudo_accounts_list))
 total_fudo_accounts_for_operators = len(fudo_accounts_for_operators)
 # logging.info('Current Data of Accounts for Operators:')
 # for data in fudo_accounts_for_operators:
@@ -233,8 +242,9 @@ grant_accounts_succeeded = []
 for data in fudo_accounts_for_operators:
     try:
         # DEPRECATED IN FUDO 5.4, USE API KEY
-        # post_data_to_fudo(fudo_grant_access_account_url, fudo_proxies, sessionid, data)
-        post_data_to_fudo(fudo_grant_access_account_url, fudo_proxies, fudo_headers, data)
+        post_data_to_fudo(fudo_grant_access_account_url, fudo_proxies, sessionid, data)
+        # post_data_to_fudo(fudo_grant_access_account_url, fudo_proxies, fudo_headers, data)
+
     except Exception as e:
         grant_accounts_failed.append(data)
         logging.error(f'\nFAILED: GRANTING ACCOUNTS({data}), CHECK STATUS CODE/ERROR({e})\n')
@@ -261,19 +271,20 @@ logging.info('\nDONE: JOB REPORT - GRANTING OPERATORS ACCESS TO ACCOUNTS\n')
 
 # GET FUDO SERVERS LIST
 # DEPRECATED IN FUDO 5.4, USE API KEY
+fudo_servers_list = (func_decor('getting Fudo actual Servers list', 'crit')
+                     (get_fudo_data)(fudo_server_url, sessionid, fudo_proxies))
 # fudo_servers_list = ((func_decor)('getting Fudo actual Servers list', 'crit')
-#                      (get_fudo_data)(fudo_server_url, sessionid, fudo_proxies))
-fudo_servers_list = ((func_decor)('getting Fudo actual Servers list', 'crit')
-                     (get_fudo_data)(fudo_server_url, fudo_headers, fudo_proxies))
+#                      (get_fudo_data)(fudo_server_url, fudo_headers, fudo_proxies))
+
 # logging.info('Current list of Servers in Fudo:')
 # for server in fudo_servers_list:
 #     logging.info(server)
 
 
 # SET SERVERS FOR OPERATORS
-fudo_servers_for_operators = ((func_decor)('setting Servers for Operators', 'crit')
-                              (set_grants_for_operator)('servers', fudo_operators, operators_data,
-                                                         fudo_accounts_list, fudo_servers_list))
+fudo_servers_for_operators = (func_decor('setting Servers for Operators', 'crit')
+                              (set_grants_for_operator)
+                              ('servers', fudo_operators, operators_data, fudo_accounts_list, fudo_servers_list))
 total_fudo_servers_for_operators = len(fudo_servers_for_operators)
 # logging.info('Current Data of Accounts for Operators:')
 # for data in fudo_servers_for_operators:
@@ -287,8 +298,9 @@ grant_servers_succeeded = []
 for data in fudo_servers_for_operators:
     try:
         # DEPRECATED IN FUDO 5.4, USE API KEY
-        # post_data_to_fudo(fudo_grant_access_server_url, fudo_proxies, sessionid, data)
-        post_data_to_fudo(fudo_grant_access_server_url, fudo_proxies, fudo_headers, data)
+        post_data_to_fudo(fudo_grant_access_server_url, fudo_proxies, sessionid, data)
+        # post_data_to_fudo(fudo_grant_access_server_url, fudo_proxies, fudo_headers, data)
+
     except Exception as e:
         grant_servers_failed.append(data)
         logging.error(f'\nFAILED: GRANTING SERVERS({data}), CHECK STATUS CODE/ERROR({e})\n')
