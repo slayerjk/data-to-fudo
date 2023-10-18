@@ -7,13 +7,13 @@ from project_static import fudo_bind_ip
 
 # FUNCTION: GET SESSIONID FOR REQUESTS
 # !!! DEPRECATED IN 5.4 USE API KEY !!!
-# @func_decor('getting Fudo sessionID', 'crit')
-# def get_sessionid(url, headers, proxies, ses_data):
-#     response = requests.post(url, headers=headers, proxies=proxies, json=ses_data, verify=False)
-#     if response.status_code == 200:
-#         return {'Authorization': response.json()['sessionid']}
-#     else:
-#         raise Exception(response.status_code)
+@func_decor('getting Fudo sessionID', 'crit')
+def get_sessionid(url, headers, proxies, ses_data):
+    response = requests.post(url, headers=headers, proxies=proxies, json=ses_data, verify=False)
+    if response.status_code == 200:
+        return {'Authorization': response.json()['sessionid']}
+    else:
+        raise Exception(response.status_code)
 
 
 # FUNCTION: PARSE AND PREPARE SERVERS DATA FROM INPUT CSV
@@ -135,7 +135,7 @@ def parse_n_set_account_data(servers_file, fudo_servers, fudo_accounts_list=None
                             changer = list(
                                 filter(
                                     lambda x: re.findall('.+-(.+)_.*$', x[0])[0] == scope and
-                                              re.findall('.*PAM-(.+)$', x[0])[0] == user, account_changers
+                                        re.findall('.*PAM-(.+)$', x[0])[0] == user, account_changers
                                 )
                             )
                             if changer:
@@ -260,19 +260,27 @@ def set_pools_data(fudo_servers, parsed_servers, pool_list):
         for parsed in parsed_servers:
             if server['name'] == parsed['name']:
                 if server['protocol'] == 'http':
-                    pool_result = list(
-                        filter(lambda x: x['scope'] == parsed['scope'] and x['protocol'] == 'HTTP', pool_list))[0]
-                    data = {
-                        'pool_id': pool_result['id'],
-                        'server_id': server['id']
-                    }
+                    try:
+                        pool_result = list(
+                            filter(lambda x: x['scope'] == parsed['scope'] and x['protocol'] == 'HTTP', pool_list))[0]
+                    except IndexError:
+                        raise Exception(f'FAILED TO FIND RIGHT POOL FOR HTTP SERVER:\n{parsed}')
+                    else:
+                        data = {
+                            'pool_id': pool_result['id'],
+                            'server_id': server['id']
+                        }
                 else:
-                    pool_result = list(filter(lambda x: x['mark'] == parsed['pool_mark']
-                                                        and x['scope'] == parsed['scope'], pool_list))[0]
-                    data = {
-                        'pool_id': pool_result['id'],
-                        'server_id': server['id']
-                    }
+                    try:
+                        pool_result = list(filter(lambda x: x['mark'] == parsed['pool_mark'] and
+                                                            x['scope'] == parsed['scope'], pool_list))[0]
+                    except IndexError:
+                        raise Exception(f'FAILED TO FIND RIGHT POOL FOR NOT HTTP SERVER:\n{parsed}')
+                    else:
+                        data = {
+                            'pool_id': pool_result['id'],
+                            'server_id': server['id']
+                        }
                 result.append(data)
                 continue
     if not result:
@@ -359,7 +367,7 @@ def set_user_to_safe_assignment(fudo_safes_list, fudo_users_list, parsed_users):
         for safe in fudo_safes_list:
             try:
                 match = re.findall('SAFE-(.+)', safe[0])[0].upper()
-            except Exception:
+            except IndexError:
                 continue
             else:
                 if user[0].upper() == match and user[0].upper() in user_parsed:
@@ -447,7 +455,9 @@ def modify_fudo_user(url, proxies, auth_header, user_id):
 def set_grants_for_operator(mode, operators, parsed_users, fudo_objects, fudo_servers=None):
     """
     Args:
-        modes: 'users'/'safes'/'accounts'/'servers'
+        mode: 'users'/'safes'/'accounts'/'servers'
+        operators: parsed operators data
+        parsed_users: parsed users data
         fudo_objects: tuple(name, id)
         fudo_servers: dict(name, ip, id, protocol, scope; use with fudo accounts data
     """
