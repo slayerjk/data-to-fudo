@@ -57,6 +57,7 @@ def parse_n_set_server_data(input_file):
                         server_data['http_password_element'] = '[id="password"]'
                         server_data['http_username_element'] = '[id="username"]'
                         server_data['http_signon_realm'] = f'https://{server_data["address"]}'
+                        # server_data['http_timeout'] = 900  # inactivity period, default value = 900 sec(15min)
 
                     server_data['name'] = f'API_S_{row[0]}_{server_data["protocol"].upper()}_{server_ip}'
 
