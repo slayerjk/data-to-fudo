@@ -2,54 +2,120 @@ import requests
 import csv
 import re
 from app_scripts.project_helper import func_decor
-from project_static import fudo_bind_ip
+from project_static import logging, fudo_bind_ip
 
 
-# FUNCTION: GET SESSIONID FOR REQUESTS
-# !!! DEPRECATED IN 5.4 USE API KEY !!!
-@func_decor('getting Fudo sessionID', 'crit')
-def get_sessionid(url, headers, proxies, ses_data):
-    response = requests.post(url, headers=headers, proxies=proxies, json=ses_data, verify=False)
-    if response.status_code == 200:
-        return {'Authorization': response.json()['sessionid']}
-    else:
-        raise Exception(response.status_code)
+# FUNCTION: GETTING FUDO DATA
+def get_fudo_data(url, headers, proxies) -> bool:
+    resp = requests.get(url, headers=headers, proxies=proxies, verify=False)
+    if resp.status_code not in (200, 201):
+        raise Exception(f'FAILED TO GET FUDO DATA:{resp.status_code}\n{resp.url}\n{resp.text}')
+    return True
+
+
+# FUNCTION: SEND DATA TO FUDO
+def post_data_to_fudo(url, proxies, auth_header, post_data):
+    resp = requests.post(url, proxies=proxies, headers=auth_header, json=post_data, verify=False)
+    if resp.status_code not in (200, 201):
+        raise Exception(f'{resp.status_code}\n{resp.url}\n{resp.text}')
 
 
 # FUNCTION: PARSE AND PREPARE SERVERS DATA FROM INPUT CSV
 @func_decor('parsing and setting server data', 'crit')
-def parse_n_set_server_data(input_file):
-    with open(input_file, 'r') as in_file:
+def parse_n_set_server_data(input_file: bytes) -> list:
+    """
+    Parse and enrich data from input csv file
+
+    :param input_file: CSV file
+    :return: list of parsed and enriched data
+
+    ROWS of CSV:
+        1 Scope: your own definitons of scope/group of network segment/compliance
+        2 OS
+        3 Name(DNS)
+        4 IP
+        5 Device Type
+            SW-windows;
+            SN-*nix;
+            SC-storage control;
+            SM-server management;
+            ND-network device
+        6 User List for SSH - ("User1, User2, ...")
+        7 User List for RDP - ("User1, User2, ...")
+        6 User List for HTTP - ("User1, User2, ...")
+
+    Return example:
+    # SERVER DATA(RDP EXAMPLE
+    [
+        {
+            'server_data': {
+                'description': 'eset-edr.bank.corp.centercredit.kz; Windows Server 2022',
+                'address': '10.15.116.40',
+                'bind_ip': '10.11.31.35',
+                'protocol': 'rdp',
+                'port': 3389,
+                'rdp_nla_enabled': True,
+                'tls_enabled': True,
+                'name': 'API_S_BANK_RDP_10.15.116.40'
+            },
+            'pool_data': {
+                'name': 'API_S_BANK_RDP_10.15.116.40',
+                'pool_mark': 'SW',
+                'scope': 'BANK',
+                'address': '10.15.116.40'
+            },
+            'user_data':
+                [
+                    {'name': 'MELIKHOD',
+                    'account_name': 'A_PAM-MELIKHOD_RDP_10.15.116.40'},
+                    {'name': 'PRASSOLA', 'account_name': 'A_PAM-PRASSOLA_RDP_10.15.116.40'},
+                    {'name': 'LIVITALI', 'account_name': 'A_PAM-LIVITALI_RDP_10.15.116.40'}
+                ]
+        }
+        # ... OTHER IP-PROTOCOL DATA
+    ]
+
+    """
+    with (open(input_file, 'r') as in_file):
         file_data = csv.reader(in_file)
         result = []
-        pool_result = []
+
         protocols = ['ssh', 'rdp', 'http']
+
         for row in file_data:
-            server_ip = row[3].strip()
+            server_ip = str(row[3].strip())
+
             if not server_ip:
                 raise Exception(f'IP COLUMN IS EMPTY: {row}')
             if not row[4]:
                 raise Exception(f'EMPTY SYSTEM TYPE COLUMN! CHECK {server_ip}')
+
             for ind, proto_data in enumerate(row[5:]):
                 server_data = dict()
-                server_pool_data = dict()
+                temp = dict()
+                users = []
 
                 if len(proto_data) == 0:
                     continue
                 else:
-                    server_data['description'] = f'{row[1]}; {row[2]}'
+                    server_data['description'] = f'{row[2]}; {row[1]}'
                     server_data['address'] = server_ip
                     server_data['bind_ip'] = fudo_bind_ip
 
-                    # _FILLED_ COLUMN 6 IN _ORIGINAL_ CSV = SSH, COL. 7 = RDP, COL 8 = HTTP
                     if ind == 0:  # SSHs
                         server_data['protocol'] = protocols[0]
                         server_data['port'] = 22
+                        if not proto_data[0]:
+                            raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
+                        users = [i.replace(',', '') for i in row[5].split()]
                     elif ind == 1:  # RDP
                         server_data['protocol'] = protocols[1]
                         server_data['port'] = 3389
                         server_data['rdp_nla_enabled'] = True
                         server_data['tls_enabled'] = True
+                        if not proto_data[1]:
+                            raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
+                        users = [i.replace(',', '') for i in row[6].split()]
                     elif ind == 2:  # HTTP
                         server_data['protocol'] = protocols[2]
                         server_data['port'] = 443
@@ -58,445 +124,961 @@ def parse_n_set_server_data(input_file):
                         server_data['http_username_element'] = '[id="username"]'
                         server_data['http_signon_realm'] = f'https://{server_data["address"]}'
                         # server_data['http_timeout'] = 900  # inactivity period, default value = 900 sec(15min)
+                        if not proto_data[2]:
+                            raise Exception(f'NO USERS FOR SERVER!({server_data["ip"]}({server_data["protocol"]})')
+                        users = [i.replace(',', '') for i in row[7].split()]
 
                     server_data['name'] = f'API_S_{row[0]}_{server_data["protocol"].upper()}_{server_ip}'
 
-                    result.append(server_data)
+                temp['server_data'] = server_data
 
-                    # DATA FOR POOL ASSIGNMENT
-                    server_pool_data['name'] = f'API_S_{row[0]}_{server_data["protocol"].upper()}_{server_ip}'
-                    server_pool_data['pool_mark'] = row[4]  # MARK FOR FUDO POOL ASSIGNMENT
-                    server_pool_data['address'] = server_ip
-                    server_pool_data['scope'] = row[0]
+                # POOL DATA
+                pool_data = dict()
 
-                    pool_result.append(server_pool_data)
+                pool_data['name'] = server_data['name']
+                pool_data['pool_mark'] = row[4]
+                pool_data['scope'] = row[0]
+                pool_data['address'] = server_data['address']
+
+                temp['pool_data'] = pool_data
+
+                # USER DATA
+                users_temp = list()
+
+                for user in users:
+                    user_data = {
+                        'name': user
+                    }
+                    if server_data['protocol'] == protocols[0]:  # SSH
+                        user_data['account_name'] = f'A_PAM-{user}_SSH_{server_ip}'
+                    elif server_data['protocol'] == protocols[1]:  # RDP
+                        user_data['account_name'] = f'A_PAM-{user}_RDP_{server_ip}'
+                    elif server_data['protocol'] == protocols[2]:  # HTTP
+                        user_data['account_name'] = f'A_PAM-{user}_HTTP_{server_ip}'
+
+                    users_temp.append(user_data)
+
+                    temp['user_data'] = users_temp
+
+                result.append(temp)
 
     if not result:
         raise Exception('EMPTY RESULT OF PARSING SERVERS!')
-    return result, pool_result
-
-
-# FUNCTION: PARSE AND PREPARE ACCOUNTS DATA FROM INPUT CSV
-def parse_n_set_account_data(servers_file, fudo_servers, fudo_accounts_list=None, dcs=None):
-    # Check if there is changer accounts created
-    account_changers = None
-    zones = None
-    if fudo_accounts_list:
-        if not dcs:
-            raise Exception('NO DCS PASSED TO FUNCTION, CAN\'t CREATE NORMAL ACCOUNTS')
-        else:
-            zones = [key for key in dcs.keys()]
-        account_changers = list(filter(lambda x: re.findall('.*A_CHANGER-.*', x[0]), fudo_accounts_list))
-
-    with open(servers_file, 'r') as in_file:
-        file_data = csv.reader(in_file)
-        result = []
-        protocols = ['ssh', 'rdp', 'http']
-
-        for row in file_data:
-            """
-            Example of row:
-                ['SCOPE', 'Windows', 'Descr', '10.*.*.* ', 'SW', '', 'USER1, USER2']
-            """
-            server_ip = row[3].strip()
-            if not server_ip:
-                raise Exception(f'IP COLUMN IS EMPTY: {row}')
-            for ind, proto_data in enumerate(row[5:]):
-                if len(proto_data) == 0:
-                    continue
-                else:
-                    """Check if there is a server in Fudo servers list with ip and proto"""
-                    current_server = list(filter(lambda x: x['ip'] == server_ip, fudo_servers))
-                    if len(current_server) == 0:
-                        continue
-
-                    users_list = [user.upper().strip() for user in proto_data.split(',')]
-
-                    for user in users_list:
-                        account_data = dict()
-                        account_data['type'] = 'regular'
-                        account_data['dump_mode'] = 'all'
-                        account_data['login'] = f'PAM-{user}'
-
-                        # SEARCH FOR ACCOUNT CHANGER'S ID FOR USER
-                        # USE SCOPE FROM YOUR SCOPES FILE
-                        if fudo_accounts_list:
-                            if account_changers:
-                                if row[0].upper() == 'SCOPE1':
-                                    scope = zones[0]
-                                elif row[0].upper() == 'SCOPE3' or row[0].upper() == 'SCOPE2':
-                                    scope = zones[1]
-                                elif row[0].upper() == 'SCOPE3' or row[0].upper() == 'SCOPE4':
-                                    scope = zones[2]
-                                elif row[0].upper() == 'SCOPE5':
-                                    scope = zones[3]
-                                else:
-                                    raise Exception(f'NOT CORRECT SCOPE({row[0]},{server_ip})')
-
-                            changer = list(
-                                filter(
-                                    lambda x: re.findall('.+-(.+)_.*$', x[0])[0] == scope and
-                                        re.findall('.*PAM-(.+)$', x[0])[0] == user, account_changers
-                                )
-                            )
-                            if changer:
-                                account_data['method'] = 'account'
-                                account_data['account_id'] = changer[0][1]
-                            else:
-                                continue  # NO CHANGER ID FOUND, SKIP USER
-
-                        account_data['category'] = 'privileged'
-                        account_data['password_change_policy_id'] = 1  # 1 for Static
-
-                        if ind == 0:  # SSH
-                            protocol = protocols[0]
-                            current_server_ssh = list(filter(lambda x: x['protocol'] == protocol, current_server))
-                            if current_server_ssh:
-                                account_data['server_id'] = current_server_ssh[0]['id']
-                            else:
-                                continue
-
-                        elif ind == 1:  # RDP
-                            protocol = protocols[1]
-                            current_server_rdp = list(filter(lambda x: x['protocol'] == protocol, current_server))
-                            if current_server_rdp:
-                                account_data['server_id'] = current_server_rdp[0]['id']
-                            else:
-                                continue
-                            account_data['ocr_enabled'] = True
-                            account_data['ocr_lang'] = 'eng+rus'
-
-                        elif ind == 2:  # HTTP
-                            protocol = protocols[2]
-                            current_server_http = list(filter(lambda x: x['protocol'] == protocol, current_server))
-                            if current_server_http:
-                                account_data['server_id'] = current_server_http[0]['id']
-                            else:
-                                continue
-                            account_data['ocr_enabled'] = True
-                            account_data['ocr_lang'] = 'eng+rus'
-
-                        account_data['name'] = f'A_PAM-{user}_{protocol.upper()}_{server_ip}'
-                        result.append(account_data)
-
-    if not result:
-        raise Exception('EMPTY RESULT OF PARSING ACCOUNTS!')
     return result
 
 
-# FUNCTION: GETTING FUDO DATA
-def get_fudo_data(url, headers, proxies):
-    response = requests.get(url, headers=headers, proxies=proxies, verify=False)
-    if response.status_code == 200:
-        if 'server' in response.json():  # to get server data
-            return [
-                {'name': i['name'],
-                 'ip': i['address'].strip(),
-                 'id': i['id'],
-                 'protocol': i['protocol'],
-                 'scope': re.findall('S_(.+)_.+_.+', i['name'])[0]
-                 }
-                for i in response.json()['server']]
-        elif 'account' in response.json():  # to get account data
-            return [(i['name'], i['id']) for i in response.json()['account']]
-        elif 'user' in response.json():  # to get user data
-            return [(i['name'], i['id']) for i in response.json()['user']]
-        elif 'safe' in response.json():  # to get safe data
-            return [(i['name'], i['id']) for i in response.json()['safe']]
-        elif 'listener' in response.json():  # to get listener data
-            return [(i['name'], i['id']) for i in response.json()['listener']]
-        elif 'pool' in response.json():  # to get pool data
-            return [
-                {
-                    'name': i['name'],
-                    'id': i['id'],
-                    'mark': re.findall('P_.+_.+_(.+)$', i['name'])[0],
-                    'scope': re.findall('P_(.+)_.+_.+$', i['name'])[0],
-                    'protocol': re.findall('P_.+_(.+)_.+$', i['name'])[0]
-                } for i in response.json()['pool']]
-        else:
-            raise Exception('NEITHER SERVER NOR ACCOUNT RESPONSE')
-    else:
-        raise Exception(response.status_code)
-
-
-# FUNCTION: SEND DATA TO FUDO
-def post_data_to_fudo(url, proxies, auth_header, post_data):
-    response = requests.post(url, proxies=proxies, headers=auth_header, json=post_data, verify=False)
-    if response.status_code not in (200, 201):
-        raise Exception(f'{response.status_code}\n{response.text}')
-
-
-# FUNCTION: SET DATA FOR POOLS
-@func_decor('setting FUDO Pools assignment data')
-def set_pools_data(fudo_servers, parsed_servers, pool_list):
-    pass
+# CREATE SAFE
+def create_fudo_safe(safe_url: str, proxies: dict, headers: dict, user: str) -> bool:
     """
-    SERVER(PARSED): 
-    {'name': 'API_S_SCOPE_SSH_10.*.*.*', 'pool_mark': 'SM', 'address': '10.*.*.*', 'scope': 'SCOPE'}
-    
-    SERVER(FILTERED): 
-    {'name': 'API_S_SCOPE_SSH_10.*.*.*', 'ip': '10.*.*.*', 'id': '1774418253183977390', 'protocol': 'ssh', 
-        'scope': 'SCOPE'}
-    
-    POOL MARKS: pool_marks = ('HV', 'ND', 'SC', 'SM', 'SN', 'SW')
-          **HV** - HyperVisors
-          **ND** - VA NetworkDevices
-          **SC** - StorageControl
-          **SM** - ServerManager(iLOM, iRMC)
-          **SN** - ServerNix(Linux, Solaris)
-          **SW** - ServerWin
-    
-    POOLS(CREATED)
-    {'name': 'P_SCOPE_SSH_SC', 'id': '1774418253183975440', 'mark': 'SC', 'scope': 'SCOPE', 'protocol': 'SSH'}
-    {'name': 'P_SCOPE_SSH_SC', 'id': '1774418253183975441', 'mark': 'SC', 'scope': 'SCOPE', 'protocol': 'SSH'}
+    Create FUDO Safe based on parsed data created by parse_n_set_server_data
+    Skip if safe is already created.
+
+    :param safe_url: str, FUDO API Save URL
+    :param proxies: dict, proxies
+    :param headers: dict, headers(AUTH)
+    :param user: str, list of users to create safe
     """
-    result = []
-    # EXCLUDE ALL SERVERS EXCEPT NEWLY CREATED(API_S_*)
-    filtered_servers = list(filter(lambda x: not x['name'].startswith('S_'), fudo_servers))
-    if len(filtered_servers) == 0:
-        raise Exception('NO SERVERS TO ASSIGN TO POOL, PROBABLY ALREADY ASSIGNED!')
+    safe_data = {
+        "name": f"SAFE-{user}",
+        "inactivity_limit": 30,
+        "rdp_resolution": "1920x1080",
+        "webclient": True,
+        "vnc_clipcli": False,
+        "vnc_clipsrv": False
+    }
 
-    for server in filtered_servers:
-        for parsed in parsed_servers:
-            if server['name'] == parsed['name']:
-                if server['protocol'] == 'http':
-                    try:
-                        pool_result = list(
-                            filter(lambda x: x['scope'] == parsed['scope'] and x['protocol'] == 'HTTP', pool_list))[0]
-                    except IndexError:
-                        raise Exception(f'FAILED TO FIND RIGHT POOL FOR HTTP SERVER:\n{parsed}')
-                    else:
-                        data = {
-                            'pool_id': pool_result['id'],
-                            'server_id': server['id']
-                        }
-                else:
-                    try:
-                        pool_result = list(filter(lambda x: x['mark'] == parsed['pool_mark'] and
-                                                            x['scope'] == parsed['scope'], pool_list))[0]
-                    except IndexError:
-                        raise Exception(f'FAILED TO FIND RIGHT POOL FOR NOT HTTP SERVER:\n{parsed}')
-                    else:
-                        data = {
-                            'pool_id': pool_result['id'],
-                            'server_id': server['id']
-                        }
-                result.append(data)
-                continue
-    if not result:
-        raise Exception('EMPTY RESULT OF SETTING POOL ASSIGNMENT! Probably already assigned!')
-    return result
+    check_exist = None
 
+    try:
+        check_exist = requests.get(
+            f'{safe_url}?filter=name.eq(SAFE-{user})',
+            proxies=proxies,
+            headers=headers,
+            verify=False
+        )
+    except Exception:
+        raise Exception(
+            f'FAILED TO CHECK IF SAFE ALREADY EXIST({user}):\n{check_exist.status_code}\n{check_exist.text}'
+        )
+    else:
+        if check_exist.status_code not in (200, 201):
+            raise Exception(check_exist.text)
 
-# FUNCTION: SET ACCOUNTS FOR CHANGERS
-@func_decor('setting Accounts for Changers', 'crit')
-def set_accounts_changers(fudo_servers, parsed_accounts, dcs, acc_pwd):
-    # Adding Account for Changers Must be created prior
-    result = []
-    zones = [key for key in dcs.keys()]
-    servers_changers = list(filter(lambda x: re.findall('^S_CHANGER-', x['name']), fudo_servers))
-    accounts_for_changer = sorted(list(set(i['login'] for i in parsed_accounts)))
-    if len(servers_changers) > 0:
-        if len(accounts_for_changer) > 0:
-            for server_changer in servers_changers:
-                for account in accounts_for_changer:
-                    account_data = dict()
-                    if server_changer['ip'] == dcs[zones[0]][1]:
-                        zone = zones[0]
-                        account_data['domain'] = dcs[zones[0]][0]
-                    elif server_changer['ip'] == dcs[zones[1]][1]:
-                        zone = zones[1]
-                        account_data['domain'] = dcs[zones[1]][0]
-                    elif server_changer['ip'] == dcs[zones[2]][1]:
-                        zone = zones[2]
-                        account_data['domain'] = dcs[zones[2]][0]
-                    elif server_changer['ip'] == dcs[zones[3]][1]:
-                        zone = zones[3]
-                        account_data['domain'] = dcs[zones[3]][0]
-                    else:
-                        raise Exception(f'NOT CORRECT DC ZONE/IP, CHECK({server_changer["ip"]})')
-                    account_data['name'] = f'A_CHANGER-{zone}_{account}'
-                    account_data['server_id'] = server_changer['id']
-                    account_data['type'] = 'regular'
-                    account_data['dump_mode'] = 'all'
-                    account_data['method'] = 'password'
-                    account_data['login'] = account
-                    account_data['secret'] = acc_pwd
-                    account_data['category'] = 'privileged'
-                    account_data['password_change_policy_id'] = 1  # 1 for Static
-                    result.append(account_data)
-            if not result:
-                raise Exception('EMPTY RESULT OF ACCOUNT CHANGERS!')
-            return result
+        if check_exist.json()['safe']:
+            raise Exception('SAFE IS ALREADY EXISTS!')
         else:
-            raise Exception('ACCOUNTS FOR CHANGERS NOT FOUND')
-    else:
-        raise Exception('CHANGERS SERVERS NOT FOUND')
-
-
-# FUNCTION: SET SAFES
-@func_decor('setting FUDO Safes', 'crit')
-def set_safes(changers_accounts):
-    result = []
-    accounts_for_safes = set([re.findall('.+_PAM-(.+)$', i['name'])[0] for i in changers_accounts])
-    for account in accounts_for_safes:
-        safe_data = {
-            "name": f'SAFE-{account}',
-            "inactivity_limit": 30,
-            # "time_limit": 90, # unlimited
-            "rdp_resolution": "1920x1080",
-            "vnc_clipcli": False,
-            "vnc_clipsrv": False
-        }
-        result.append(safe_data)
-    if not result:
-        raise Exception('EMPTY RESULT OF SAFES!')
-    else:
-        return result
-
-
-# FUNCTION: SET USERS TO SAFE ASSIGNMENT
-@func_decor('setting Users to Safes assignments', 'crit')
-def set_user_to_safe_assignment(fudo_safes_list, fudo_users_list, parsed_users):
-    user_parsed = set([re.findall('PAM-(.+)', i['login'])[0] for i in parsed_users])
-    if not user_parsed:
-        raise Exception('NO USERS FOR SAFE ASSIGNMENT FOUND!')
-    result = []
-    for user in fudo_users_list:
-        assignment_data = dict()
-        for safe in fudo_safes_list:
+            # creating safe
             try:
-                match = re.findall('SAFE-(.+)', safe[0])[0].upper()
-            except IndexError:
+                create_resp = requests.post(safe_url, proxies=proxies, headers=headers, verify=False, json=safe_data)
+            except Exception:
+                raise Exception(
+                    f'FAILED TO CREATE SAFE{user}:\n{check_exist.status_code}\n{check_exist.text}'
+                )
+            else:
+                if create_resp.status_code not in (200, 201):
+                    raise Exception(create_resp.text)
+    return True
+
+
+# FUNCTION: ENRICH SERVER DATA
+@func_decor('enriching parsed data', 'crit')
+def enrich_data(
+        server_url: str,
+        listener_url: str,
+        pool_url: str,
+        user_url: str,
+        safe_url: str,
+        headers: dict,
+        proxies: dict,
+        parsed_data: dict
+) -> dict:
+    """
+    :param server_url: str, FUDO API URL for Server
+    :param listener_url: str, FUDO API URL for Listener
+    :param pool_url: str, FUDO API URL for Pool
+    :param user_url: str, FUDO API URL for User
+    :param safe_url: str, FUDO API URL for Safe
+    :param headers: dict, FUDO Auth header
+    :param proxies: dict, proxies
+    :param parsed_data: dict, result of "parse_n_set_server_data(input_file: bytes)"
+    :return list: same list with servers id
+    """
+    server_data = parsed_data['server_data']
+    pool_data = parsed_data['pool_data']
+    user_data = parsed_data['user_data']
+
+    # TRY TO GET SERVER'S INFO
+    server_resp = requests.get(
+        f'{server_url}&filter=name.eq({server_data["name"]})',
+        headers=headers, proxies=proxies, verify=False
+    )
+
+    if server_resp.status_code == 200:
+        try:
+            server_id = server_resp.json()['server'][0]['id']
+        except Exception:
+            raise Exception(f'FAILED TO FIND SERVER\'S ID, skip this server')
+        else:
+            server_data['server_id'] = server_id
+    else:
+        raise Exception(f'FAILED TO GET SERVER INFO\n{server_resp.status_code}\n, '
+                        f'{server_resp.url}\n, {server_resp.text}')
+    # response = requests
+
+    # TRY TO GET LISTENERS DATA AND MATCH WITH SERVERS
+    """
+    Listeners example:
+    {'result': 'success', 
+    'listener': [
+        {'id': '***977', 
+        'name': 'L_RDP_bastion:3389', 
+        'blocked': False, 
+        'protocol': 'rdp', 
+        'mode': 'bastion', 
+        'listen_ip': '10.X.X.X', 
+        ...
+    ]
+    """
+    try:
+        listeners_resp = requests.get(
+            listener_url,
+            proxies=proxies,
+            headers=headers,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(f'FAILED TO GET LISTENERS:\n{e}')
+    else:
+        if listeners_resp.status_code not in (200, 201):
+            raise Exception(f'FAILED TO GET LISTENERS, check response:\n{listeners_resp.text}')
+
+        listeners = [i for i in listeners_resp.json()['listener']]
+
+        # I'm using only one HTTP listener
+        for listener in listeners:
+            if server_data['protocol'] == 'http':
+                if server_data['protocol'] == listener['protocol']:
+                    server_data['listener_name'] = listener['name']
+                    server_data['listener_id'] = listener['id']
+                    break
+            else:
+                if server_data['protocol'] == listener['protocol'] and server_data['port'] == listener['listen_port']:
+                    server_data['listener_name'] = listener['name']
+                    server_data['listener_id'] = listener['id']
+                    break
+
+    # TRY TO GET SEVER'S POOL TO ASSIGN TO
+    # get current pools list
+    pools_resp = requests.get(pool_url, headers=headers, proxies=proxies, verify=False)
+
+    if pools_resp.status_code != 200:
+        raise Exception(f'FAILED TO GET POOL INFO\n{pools_resp.status_code}\n, {pools_resp.url}\n, {pools_resp.text}')
+
+    acc_match_pattern = r'.+?_.+?_(.+?)_(.+?)_.*'
+
+    account_mark = pool_data['pool_mark']
+    acc_match_re = re.match(acc_match_pattern, pool_data['name'])
+    try:
+        account_scope = acc_match_re.group(1)
+        account_proto = acc_match_re.group(2)
+    except Exception as e:
+        raise Exception(f'FAILED TO GET ACCOUNT DETAILS FOR POOL:\n{e}')
+
+    """
+    TRY TO FILTER SUCH POOL DATA(Example):
+    
+    'pool_data': {'name': 'API_S_TEST_RDP_10.1.1.1', 'pool_mark': 'SW', 'scope': 'TEST', 'address': '10.1.1.1'}
+    SCOPE = TEST
+    MARK = SW
+    PROTO = RDP
+    
+    AND
+    
+    FUDO POOL(Example):
+    "result": "success",
+    "pool": [
+        {
+            "id": "***988",
+            "name": "P_ALL_LDAPS_PC"
+        },
+        ...
+    ]
+    """
+    try:
+        pools = [i for i in pools_resp.json()['pool']]
+    except Exception as e:
+        raise Exception(f'FAILED TO GET POOLS,\n{e}')
+    """
+    Pools list example(1 item):
+    
+    {'id': '***988', 
+    'name': 'P_ALL_LDAPS_PC', 
+    'description': 'PwdChangers Servers(DC)', 
+    'created_at': '202*-**-** 14:35:51.074676+**', 
+    'modified_at': '202*-**-** 11:09:59.6911+**', 
+    'servers': ['***971', '***972', '***973', '***581'], 
+    'protocol': 'rdp', 
+    'builtin': False, 
+    'hidden': False}
+    """
+    pool_match_pattern = r'._(.+?)_(.+?)_(.+)'
+    flag = False
+
+    for pool in pools:
+        pool_match_re = re.match(pool_match_pattern, pool['name'])
+        try:
+            # separate rule for HTTP, because my pools for HTTP looks like: P_SCOPE_HTTP_VA; VA - for VArious
+            if account_proto == 'HTTP':
+                if pool_match_re.group(1) == account_scope and pool_match_re.group(2) == account_proto and \
+                        pool_match_re.group(3) == 'VA':
+                    pool_data['pool_name'] = pool['name']
+                    pool_data['pool_id'] = pool['id']
+                    flag = True
+                    break
+
+            else:
+                if pool_match_re.group(1) == account_scope and pool_match_re.group(2) == account_proto and \
+                        pool_match_re.group(3) == account_mark:
+                    pool_data['pool_name'] = pool['name']
+                    pool_data['pool_id'] = pool['id']
+                    flag = True
+                    break
+
+        except Exception as e:
+            raise Exception(f'FAILED TO MATCH ACC & POOL DATA:\n{pool["name"]}\n{e}')
+
+    if not flag:
+        raise Exception(f'FAILED TO FIND CORRECT POOL({pool_data["name"]})')
+
+    # TRY TO ENRICH USER DATA
+    """
+    !USER MUST EXIST IN FUDO!
+    
+    User data example:
+    'user_data':
+                [
+                    {'name': 'MELIKHOD',
+                    'account_name': 'A_PAM-MELIKHOD_RDP_10.15.116.40'},
+                    {'name': 'PRASSOLA', 'account_name': 'A_PAM-PRASSOLA_RDP_10.15.116.40'},
+                    {'name': 'LIVITALI', 'account_name': 'A_PAM-LIVITALI_RDP_10.15.116.40'}
+                ]
+                
+    User response example:
+    {'result': 'success', 
+    'user': [
+        {'id': '***996', 
+        'name': 'USER1', 
+        ...}]
+    ...
+    """
+    # trying to get user_id
+    for user in user_data:
+        user_resp = requests.get(
+            f'{user_url}?filter=name.eq({user["name"]})',
+            headers=headers,
+            proxies=proxies,
+            verify=False
+        )
+
+        if user_resp.status_code != 200:
+            raise Exception(f'FAILED TO GET POOL INFO\n{user_resp.status_code}\n, {user_resp.url}\n, {user_resp.text}')
+        else:
+            try:
+                user['user_id'] = user_resp.json()['user'][0]['id']
+            except Exception as e:
+                raise Exception(f'FAILED TO FIND USER DATA IN API: {user["name"]}\n{e}')
+
+        # set changer data
+        # user['changer'] parsed_data['pool_data']['scope']
+
+        # trying to get user's safe_id
+        safe_resp = requests.get(
+            f'{safe_url}?filter=name.eq(SAFE-{user["name"]})',
+            headers=headers,
+            proxies=proxies,
+            verify=False
+        )
+
+        if safe_resp.status_code != 200:
+            raise Exception(
+                f'FAILED TO GET USER SAFE INFO\n{safe_resp.status_code}\n, {safe_resp.url}\n, {safe_resp.text}'
+            )
+        else:
+            try:
+                user['safe_name'] = safe_resp.json()['safe'][0]['name']
+                user['safe_id'] = safe_resp.json()['safe'][0]['id']
+            except Exception as e:
+                raise Exception(f'FAILED TO FIND USER SAFE DATA IN API: {user["name"]}\n{e}')
+
+    return parsed_data
+
+
+# ASSIGN SERVERS TO POOLS
+def assign_server_to_pool(
+        pools_url: str,
+        proxies: dict,
+        headers: dict,
+        parsed_data: dict
+) -> bool:
+    """
+        Assign Server to Pool based on enriched data created by
+        Skip if safe is already created.
+
+        :param pools_url: str, FUDO API Save URL
+        :param proxies: dict, proxies
+        :param headers: dict, headers(AUTH)
+        :param parsed_data: dict, enriched data
+    """
+    data = {
+        'server_id': parsed_data['server_data']['server_id'],
+        'pool_id': parsed_data['pool_data']['pool_id']
+    }
+    try:
+        resp = requests.post(
+            f'{pools_url}/server',
+            proxies=proxies,
+            headers=headers,
+            json=data,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(f'FAILED TO DO ASP:\n{e}')
+    else:
+        if resp.status_code not in (200, 201):
+            raise Exception(f'{resp.status_code}\n{resp.text}')
+
+    return True
+
+
+# CREATE ACCOUNTS
+def create_accounts(
+        acc_url: str,
+        server_url: str,
+        proxies: dict,
+        headers: dict,
+        parsed_data: dict,
+        acc_pwd: str,
+        dcs: dict
+) -> dict:
+    """
+    Create changers for LDAP based on parsed data
+    Then create accounts
+
+    !Changers Servers must exist! example to search S_CHANGER-<SCOPE>_LDAPS_<DC IP>
+
+    :param acc_url: str, FUDO API URL for Account
+    :param server_url: str, FUDO API URL for Server
+    :param proxies: dict, proxies
+    :param headers: dict, headers(AUTH)
+    :param parsed_data: dict, one obj of parsed data
+    :param acc_pwd: str, default password for changers
+    :param dcs: dict, dict with DOMAIN short/long DN
+    """
+    # get changers servers
+    try:
+        servers_resp = requests.get(
+            f'{server_url}&filter=name.match(CHANGER)',
+            proxies=proxies,
+            headers=headers,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(f'FAILED TO GET SERVERS CHANGERS, check request:\n{e}\n')
+    else:
+        if servers_resp.status_code not in (200, 201):
+            raise Exception(f'{servers_resp.status_code}\n{servers_resp.text}')
+        else:
+            changers = servers_resp.json()['server']
+
+    # creating corresponding changer account
+    for user in parsed_data['user_data']:
+        domain = dcs[parsed_data['pool_data']['scope']][1]
+        changer_zone = dcs[parsed_data['pool_data']['scope']][0]
+        pattern = f'S_CHANGER-({changer_zone})_.*'
+
+        for changer in changers:
+            changer_zone_match = re.match(pattern, changer['name'])
+
+            try:
+                changer_zone_match_result = changer_zone_match.group(1)
+            except AttributeError:
+                continue
+
+            if changer_zone != changer_zone_match_result:
                 continue
             else:
-                if user[0].upper() == match and user[0].upper() in user_parsed:
-                    assignment_data['user_id'] = user[1]
-                    assignment_data['safe_id'] = safe[1]
-                    result.append([user[0], assignment_data])
-                    break
-    if not result:
-        raise Exception('EMPTY RESULT OF USER TO SAFE ASSIGNMENTS!')
-    return result
+                # create changer account
+                changer_acc_data = {
+                    "name": f'A_CHANGER-{changer_zone}_PAM-{user["name"]}',
+                    "type": "regular",
+                    "dump_mode": "all",
+                    "category": "privileged",
+                    "server_id": changer['id'],
+                    "domain": domain,
+                    "login": f'PAM-{user["name"]}',
+                    "method": "password",
+                    "secret": acc_pwd
+                }
+
+                user['changer'] = changer_acc_data['name']
+                user['domain'] = domain
+
+                try:
+                    create_changer_resp = requests.post(
+                        acc_url,
+                        proxies=proxies,
+                        headers=headers,
+                        verify=False,
+                        json=changer_acc_data
+                    )
+                except Exception as e:
+                    # logging.warning(f'ERROR({user["changer"]}):\n{e}\n')
+                    raise Exception(f'ERROR({user["changer"]}):\n{e}\n')
+                else:
+                    if create_changer_resp.status_code not in (200, 201):
+                        logging.warning(
+                            f'ERROR({user["changer"]}):'
+                            f'\n{create_changer_resp.status_code}'
+                            f'\n{create_changer_resp.text}\n'
+                        )
+
+                logging.info(f'DONE creating changer account: {user["changer"]}\n')
+
+                # trying to get changer id
+                try:
+                    changer_resp = requests.get(
+                        f'{acc_url}&filter=name.eq({user["changer"]})',
+                        proxies=proxies,
+                        headers=headers,
+                        verify=False
+                    )
+                except Exception as e:
+                    # logging.warning(f'FAILED TO GET CHANGER ID({user["changer"]}):\n{e}\n')
+                    raise Exception(f'FAILED TO GET CHANGER ID({user["changer"]}):\n{e}\n')
+                else:
+                    if changer_resp.status_code not in (200, 201):
+                        logging.warning(f'ERROR({user["changer"]}):\n{changer_resp.status_code}\n{changer_resp.text}\n')
+                    else:
+                        user['changer_id'] = changer_resp.json()['account'][0]['id']
+
+            break
+
+    for user in parsed_data['user_data']:
+        # now trying to create usual account
+        logging.info(f'CREATING REGULAR ACCOUNT NOW({user["account_name"]})')
+
+        acc_data = {
+            "name": user["account_name"],
+            "type": "regular",
+            "dump_mode": "all",
+            "category": "privileged",
+            "server_id": parsed_data["server_data"]["server_id"],
+            # "domain": domain,
+            "login": f'PAM-{user["name"]}',
+            "method": "account",
+            "account_id": user["changer_id"]
+        }
+
+        try:
+            create_acc_resp = requests.post(acc_url, proxies=proxies, headers=headers, verify=False, json=acc_data)
+        except Exception as e:
+            # logging.warning(f'FAILED TO CREATE REGULAR ACCOUNT({user["account_name"]}):\n{e}')
+            raise Exception(f'CHECK CREATE REGULAR ACCOUNT REQUEST({user["account_name"]}):\n{e}')
+        else:
+            if create_acc_resp.status_code not in (200, 201):
+                logging.warning(
+                    f'ERROR({user["account_name"]}):\n{create_acc_resp.status_code}\n{create_acc_resp.text}\n'
+                )
+            else:
+                logging.info(f'DONE: CREATING REGULAR ACCOUNT NOW({user["account_name"]})')
+
+        # get created account id
+        logging.info(f'Trying to get newly created account id({user["account_name"]})')
+        try:
+            acc_resp = requests.get(
+                f'{acc_url}&filter=name.eq({user["account_name"]})',
+                proxies=proxies,
+                headers=headers,
+                verify=False
+            )
+        except Exception as e:
+            # logging.warning(f'FAILED TO CREATE REGULAR ACCOUNT({user["account_name"]}):\n{e}')
+            raise Exception(f'FAILED TO GET REGULAR ACCOUNT ID, check request({user["account_name"]}):\n{e}')
+        else:
+            if acc_resp.status_code not in (200, 201):
+                logging.warning(
+                    f'ERROR({user["account_name"]}):\n{create_acc_resp.status_code}\n{create_acc_resp.text}\n'
+                )
+            else:
+                logging.info(f'DONE: GETTING REGULAR ACCOUNT ({user["account_name"]})')
+                user['account_id'] = acc_resp.json()['account'][0]['id']
+
+    return parsed_data
 
 
-# SET ACCOUNT-SAFE-LISTENERS ASSIGNMENTS
-@func_decor('setting FUDO Acoount-Safe-Listener assignments')
-def set_asl_assignment(fudo_accounts, fudo_safes, fudo_listeners, parsed_users):
-    user_parsed = set([re.findall('PAM-(.+)', i['login'])[0] for i in parsed_users])
-    if not user_parsed:
-        raise Exception('NO USERS FOR A-S-F ASSIGNMENTS FOUND!')
-    result = []
-    account_changer_filter = list(filter(lambda x: re.findall('^A_PAM-', x[0]), fudo_accounts))
-    account_filter = list(filter(lambda x: re.findall('^A_PAM-(.+)_.+_.+', x[0])[0] in user_parsed,
-                                 account_changer_filter))
-    safe_user_filter = list(filter(lambda x: re.findall('^SAFE-', x[0]), fudo_safes))
-    safe_filter = list(filter(lambda x: re.findall('^SAFE-(.+)', x[0])[0] in user_parsed, safe_user_filter))
-    assignment_data = None
-    for safe in safe_filter:
-        for account in account_filter:
-            if re.findall('^A_PAM-(.+)_.+_.+', account[0])[0] == re.findall('^SAFE-(.+)', safe[0])[0]:
-                for listener in fudo_listeners:
-                    if re.findall('^A_PAM-.+_(.+)_.+', account[0]) == re.findall('^L_(.+)_.+', listener[0]):
-                        assignment_data = {
-                            "account_id": account[1],
-                            "safe_id": safe[1],
-                            "listener_id": listener[1]
-                        }
-                result.append([safe[0], assignment_data])
-    if not result:
-        raise Exception('EMPTY RESULT OF A-S-L ASSIGNMENTS!')
-    return result
+# CREATE USER TO SAFE ASSINMENT & ACCOUNT, LISTENER TO SAFE ASSIGNMENT
+def assign_data_to_safe(
+        us_url: str,
+        als_url: str,
+        proxies: dict,
+        headers: dict,
+        parsed_data: dict,
+) -> bool:
+    """
+    Creates User to Safe assignment
+    Then create Accounts-Listeners to Safe assignment
+
+    !Changers Servers must exist! example to search S_CHANGER-<SCOPE>_LDAPS_<DC IP>
+
+    :param us_url: str, FUDO API USER TO SAFE URL
+    :param als_url: str, FUDO API ACCOUNT-LISTENER TO SAFE URL
+    :param proxies: dict, proxies
+    :param headers: dict, headers(AUTH)
+    :param parsed_data: dict, one obj of parsed data
+    """
+    # first try to make User to Safe assignment
+    listener_name = parsed_data['server_data']['listener_name']
+    listener_id = parsed_data['server_data']['listener_id']
+
+    for user in parsed_data['user_data']:
+        logging.info(f'STARTED: assigning {user["name"]} to {user["safe_name"]}')
+        us_data = {
+            "user_id": user['user_id'],
+            "safe_id": user['safe_id']
+        }
+
+        try:
+            us_resp = requests.post(us_url, proxies=proxies, headers=headers, verify=False, json=us_data)
+        except Exception as e:
+            logging.error(f'FAILED: assigning {user["name"]} to {user["safe_name"]}:\n{e}')
+            continue
+        else:
+            if us_resp.status_code not in (200, 201):
+                logging.error(
+                    f'FAILED: assigning {user["name"]} to {user["safe_name"]}:\n{us_resp.status_code}\n{us_resp.text}'
+                )
+                continue
+        logging.info(f'DONE: assigning {user["name"]} to {user["safe_name"]}')
+
+    for user in parsed_data['user_data']:
+        # trying to make Account-Listener to Safe assingment
+        logging.info(
+            f'STARTED: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}')
+
+        als_data = {
+            "account_id": user['account_id'],
+            "safe_id": user['safe_id'],
+            "listener_id": listener_id
+        }
+
+        try:
+            als_resp = requests.post(als_url, proxies=proxies, headers=headers, verify=False, json=als_data)
+        except Exception as e:
+            logging.error(f'FAILED: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}:\n{e}')
+            continue
+        else:
+            if als_resp.status_code not in (200, 201):
+                logging.error(
+                    f'FAILED: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}:'
+                    f'\n{als_resp.status_code}'
+                    f'\n{als_resp.text}'
+                )
+                continue
+        logging.info(
+            f'DONE: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}')
+
+    return True
 
 
 # PARSE DATA FROM OPERATORS FILE
 @func_decor('parsing Operators file', 'crit')
-def parse_operators_file(input_file):
-    result = dict()
-    with open(input_file, encoding='utf-8') as file:
+def parse_operators_file(input_file: bytes) -> list:
+    """
+    Parse input CSV
+
+    :param input_file: bytes, CSV file
+
+    :retrun list: list of dicts
+
+    return example:
+    [
+        {'OP-TEST-1': {'users': ['user1', 'user2'], 'user_ids': None, 'servers': None, 'accounts': None, 'safes': None}}
+        {'OP-TEST-2': {'users': ['user3'], 'user_ids': None, 'servers': None, 'accounts': None, 'safes': None}}
+    ]
+    """
+    keys = ('operator', 'users', 'user_ids', 'servers', 'accounts', 'safes')
+    result = list()
+
+    with (open(input_file, encoding='utf-8') as file):
         data = csv.reader(file)
+
         for row in data:
-            result[row[0]] = row[1].split()
+            temp = dict.fromkeys(keys)
+            temp['operator'] = [row[0]]
+            temp['users'] = row[1].split()
+            result.append(temp)
     if not result:
         raise Exception('EMPTY RESULT OF PARSING OPERATORS FILE!')
     return result
 
 
-# SET OPERATORS FOR FUDO
-@func_decor('setting Users for patching to Operator role')
-def set_operators(parsed_users, fudo_users):
-    result = []
-    for operator in parsed_users:
-        for user, user_id in fudo_users:
-            if operator == user:
-                data = {
-                    'name': user,
-                    'id': user_id
-                }
-                result.append(data)
-                break
-    if not result:
-        raise Exception('EMPTY RESULT OF SETTING OPERATORS!')
-    return result
-
-
-# MODIFY FUDO USER
-def modify_fudo_user(url, proxies, auth_header, user_id):
+# GET USER IDs
+def get_users_ids(user_url: str, proxies: dict, headers: dict, parsed_data: dict) -> dict:
     """
-        Fullname, Email, Phone, AD domain, LDAP base fieldes must be filled!
+    1. Get Operator id - result is list of [operator, operator_id]
+    2. Get user ids granted for operator
+
+    :param user_url: str, API URL to get user data
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
     """
-    response = requests.patch(f'{url}/{user_id}', proxies=proxies, headers=auth_header,
-                              json={"role": "operator"}, verify=False)
-    if response.status_code not in (200, 201):
-        raise Exception(f'{response.status_code}\n{response.text}')
+    # first get operator's id
+    operator = parsed_data['operator'][0]
+
+    try:
+        resp = requests.get(
+            f'{user_url}?filter=name.eq({operator})',
+            proxies=proxies,
+            headers=headers,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(e)
+
+    if resp.status_code not in (200, 201):
+        raise Exception(f'{resp.status_code}\n{resp.text}')
+
+    try:
+        operator_id = resp.json()['user'][0]['id']
+    except (IndexError, KeyError):
+        raise Exception(f'NOT FOUND OPERATOR ID({operator})')
+
+    parsed_data['operator'].append(operator_id)
+
+    # not try to get every user' id granted for operator
+    parsed_data['user_ids'] = list()
+
+    for user in parsed_data['users']:
+        try:
+            resp = requests.get(
+                f'{user_url}?filter=name.eq({user})',
+                proxies=proxies,
+                headers=headers,
+                verify=False
+            )
+        except Exception as e:
+            raise Exception(e)
+        else:
+            if resp.status_code not in (200, 201):
+                raise Exception(f'{resp.status_code}\n{resp.text}')
+
+            try:
+                user_id = resp.json()['user'][0]['id']
+            except (IndexError, KeyError):
+                raise Exception(f'NOT FOUND USER ID FOR {user}')
+
+            parsed_data['user_ids'].append(user_id)
+
+    return parsed_data
 
 
-# SET GRANTS OF FUDO OBJECTS FOR OPERATORS
-def set_grants_for_operator(mode, operators, parsed_users, fudo_objects, fudo_servers=None):
+# MODIFY USER TO BE OPERATOR
+def set_operator_role(modify_user_url: str, proxies: dict, headers: dict, parsed_data: dict) -> None:
     """
-    Args:
-        mode: 'users'/'safes'/'accounts'/'servers'
-        operators: parsed operators data
-        parsed_users: parsed users data
-        fudo_objects: tuple(name, id)
-        fudo_servers: dict(name, ip, id, protocol, scope; use with fudo accounts data
+    Get user ids granted for operator
+
+    :param modify_user_url: str, API URL modify user(set Operator role)
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
     """
-    result = []
-    for operator in operators:
-        for op_user in parsed_users[operator['name']]:
-            if mode == 'users':
-                for user, user_id in fudo_objects:
-                    if op_user == user:
-                        result.append({'to_user_id': operator['id'], 'for_user_id': str(user_id)})
+    operator_id = parsed_data['operator'][1]
+    data = {"role": "operator"}
 
-            elif mode == 'safes':
-                for safe, safe_id in fudo_objects:
-                    if re.search(fr'SAFE-{op_user}', safe):
-                        result.append({'to_user_id': operator['id'], 'for_safe_id': str(safe_id)})
+    try:
+        resp = requests.patch(
+            f'{modify_user_url}/{operator_id}',
+            proxies=proxies,
+            headers=headers,
+            verify=False,
+            json=data
+        )
+    except Exception as e:
+        raise Exception(e)
+    else:
+        if resp.status_code not in (200, 201):
+            raise Exception(f'{resp.status_code}\n{resp.text}\n{resp.url}\n')
 
-            elif mode == 'accounts':
-                fudo_accs_filtered = list(filter(lambda x: re.search(fr'{op_user}', x[0])
-                                                           and 'CHANGER' not in x[0], fudo_objects))
-                for acc, acc_id in fudo_accs_filtered:
-                    result.append({'to_user_id': operator['id'], 'for_account_id': str(acc_id)})
 
-            elif mode == 'servers':
-                fudo_accs_filtered = filter(lambda x: re.search(fr'{op_user}', x[0])
-                                                           and 'CHANGER' not in x[0], fudo_objects)
-                # GET (NAME, IP, PROTOCOL)
-                servers_to_process = ((re.search(r'^A_(L-)?PAM-(\w+)_\w+_\d+\.\d+\.\d+\.\d+$', x[0]).group(2),
-                                          re.search(r'_(\d+\.\d+\.\d+\.\d+)$', x[0]).group(1),
-                                           re.search(r'_(\w+)_\d+\.\d+\.\d+\.\d+$', x[0]).group(1).lower())
-                                            for x in fudo_accs_filtered)
-                for server in servers_to_process:
-                    for fudo_server in fudo_servers:
-                        if server[1] == fudo_server['ip'] and server[2] == fudo_server['protocol']:
-                            result.append({'to_user_id': operator['id'], 'for_server_id': fudo_server['id']})
-                            break
+# GET SERVERS IDs AND ACCOUNTS IDs
+def get_servers_n_accounts_ids(acc_url: str, proxies: dict, headers: dict, parsed_data: dict) -> dict:
+    """
+    Get Servers ids & Account ids based on Users granted for operator
 
+    :param acc_url: str, API URL to get Accounts data
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
+    """
+    parsed_data['servers'] = set()
+    parsed_data['accounts'] = set()
+
+    for user in parsed_data['users']:
+        try:
+            resp = requests.get(
+                f'{acc_url}&filter=name.match({user})',
+                proxies=proxies,
+                headers=headers,
+                verify=False
+            )
+        except Exception as e:
+            raise Exception(e)
+        else:
+            if resp.status_code not in (200, 201):
+                raise Exception(f'{resp.status_code}\n{resp.text}')
+            # exclude PASSWORD CHANGER accounts and servers
+            servers = [i for i in resp.json()['account'] if 'CHANGER' not in i['name']]
+        """
+        Example of server in servers:
+        
+        [
+            {
+                'id': '***0491', 
+                'name': 'A_PAM-TEST1_RDP_172.X.X.X', 
+                'server_id': '***972', 
+                'ocr_enabled': False
+            }
+            ...
+        ]
+        """
+        for server in servers:
+            parsed_data['servers'].add(server['server_id'])
+            parsed_data['accounts'].add(server['id'])
+
+    return parsed_data
+
+
+# GET LISTENER IDs(NOT NECESSARY FOR OPERATORS!)
+def get_listeners_ids(listener_url: str, proxies: dict, headers: dict, parsed_data: dict) -> dict:
+    """
+    Get ALL Listener ids
+
+    :param listener_url: str, API URL to get Accounts data
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
+    """
+    try:
+        resp = requests.get(
+            f'{listener_url}?fields=id,name',
+            proxies=proxies,
+            headers=headers,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(e)
+    else:
+        if resp.status_code not in (200, 201):
+            raise Exception(f'{resp.status_code}\n{resp.text}')
+        listeners = [i for i in resp.json()['listener']]
+        """
+        Listeners example:
+        
+        [
+            {
+                'id': '5665528331232083977', 
+                'name': 'L_RDP_bastion:9833'
+            }, 
+            ...
+        ]
+        """
+        parsed_data['listeners'] = [i['id'] for i in listeners]
+
+    return parsed_data
+
+
+# GET SAFES IDs
+def get_safes_ids(safe_url: str, proxies: dict, headers: dict, parsed_data: dict) -> dict:
+    """
+    Get Safes ids based on Users granted for operator
+
+    :param safe_url: str, API URL to get Accounts data
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
+    """
+    parsed_data['safes'] = list()
+
+    for user in parsed_data['users']:
+        try:
+            resp = requests.get(
+                f'{safe_url}?fields=id,name&filter=name.eq(SAFE-{user})',
+                proxies=proxies,
+                headers=headers,
+                verify=False
+            )
+        except Exception as e:
+            raise Exception(e)
+        else:
+            if resp.status_code not in (200, 201):
+                raise Exception(f'{resp.status_code}\n{resp.text}')
+            # there is only one/none safe like SAFE-<USER>
+            try:
+                safe = resp.json()['safe'][0]['id']
+            except (IndexError, KeyError):
+                raise Exception(f'NOT FOUND SAFE FOR {user}')
             else:
-                raise Exception('WRONG MODE!')
-    if not result:
-        raise Exception('EMPTY RESULT OF SETTING FUDO OBJECTS FOR OPERATORS!')
-    return result
+                parsed_data['safes'].append(safe)
+
+    return parsed_data
+
+
+# SET GRANTS
+def set_grants(
+        grant_user_url: str,
+        grant_acc_url: str,
+        grant_srv_url: str,
+        grant_safe_url: str,
+        proxies: dict,
+        headers: dict,
+        parsed_data: dict
+) -> None:
+    """
+    Get Safes ids based on Users granted for operator
+
+    :param grant_user_url: str, API URL to grant User to User
+    :param grant_acc_url: str, API URL to grant Account to User
+    :param grant_srv_url: str, API URL to grant Server to User
+    :param grant_safe_url: str, API URL to grant Safe to User
+    :param proxies: dict, proxies
+    :param headers: dict, auth headers
+    :param parsed_data: dict, parsed result of parse_operators_file
+
+    :return dict: same parsed data enriched with user ids
+    """
+    operator = parsed_data['operator'][0]
+    operator_id = parsed_data['operator'][1]
+
+    # grant users to operator
+    logging.info(f'STARTED: granting Users to {operator}')
+
+    for user in parsed_data['user_ids']:
+        data = {
+            "to_user_id": operator_id,
+            "for_user_id": user
+        }
+
+        try:
+            resp = requests.post(grant_user_url, proxies=proxies, headers=headers, verify=False, json=data)
+        except Exception as e:
+            raise Exception(e)
+
+        if resp.status_code not in (200, 201):
+            logging.warning(f'FAILED TO GRANT {user} TO {operator}:\n{resp.status_code}\n{resp.text}\n')
+
+    logging.info(f'DONE: granting Users to {operator}\n')
+
+    # grant accounts to operator
+    logging.info(f'STARTED: granting Accounts to {operator}')
+    for account in parsed_data['accounts']:
+        data = {
+            "to_user_id": operator_id,
+            "for_account_id": account
+        }
+
+        try:
+            resp = requests.post(grant_acc_url, proxies=proxies, headers=headers, verify=False, json=data)
+        except Exception as e:
+            raise Exception(e)
+
+        if resp.status_code not in (200, 201):
+            logging.warning(f'FAILED TO GRANT {account} TO {operator}:\n{resp.status_code}\n{resp.text}\n')
+
+    logging.info(f'DONE: granting Accounts to {operator}\n')
+
+    # grant servers to operator
+    logging.info(f'STARTED: granting Servers to {operator}')
+    for server in parsed_data['servers']:
+        data = {
+            "to_user_id": operator_id,
+            "for_server_id": server
+        }
+
+        try:
+            resp = requests.post(grant_srv_url, proxies=proxies, headers=headers, verify=False, json=data)
+        except Exception as e:
+            raise Exception(e)
+
+        if resp.status_code not in (200, 201):
+            logging.warning(f'FAILED TO GRANT {server} TO {operator}:\n{resp.status_code}\n{resp.text}\n')
+
+    logging.info(f'DONE: granting Servers to {operator}\n')
+
+    # grant safes to operator
+    logging.info(f'STARTED: granting Safes to {operator}')
+    for safe in parsed_data['safes']:
+        data = {
+            "to_user_id": operator_id,
+            "for_safe_id": safe
+        }
+
+        try:
+            resp = requests.post(grant_safe_url, proxies=proxies, headers=headers, verify=False, json=data)
+        except Exception as e:
+            raise Exception(e)
+
+        if resp.status_code not in (200, 201):
+            logging.warning(f'FAILED TO GRANT {safe} TO {operator}:\n{resp.status_code}\n{resp.text}\n')
+
+    logging.info(f'DONE: granting Safes to {operator}\n')
