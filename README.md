@@ -1,7 +1,7 @@
 # data-to-fudo
 This script automatizes routine of adding Accounts, Servers, Safes, Operators to FUDO PAM
 
-Use for FUDO PAM 5.4 and later! Can use legacy API(login/pass, check project_statyc.py.
+Use for FUDO PAM 5.4 and later!
 
 Data to Fudo
 
@@ -75,23 +75,31 @@ USER2, USER3 USER4 USER5
 
 # data_files/con-data - Connection data file
 
-Assumed that:
-- corresponding PAM-users created in your AD/local hosts, for ex. for user USER1 created PAM-USER1 account wiht DEFAULT password(see below in con-data)
-- point to all your domain names and dc's IP(for Password changers) if you need several
+Rename BLANK_con-data to con-data to use in script!
 
-```
-https://<YOUR-FUDO-MGMT-URL>
-<YOUR FUDO BIND IP>
-<YOUR FUDO API USER - MUST BE SUPERADMIN>
-<YOUR FUDO API USER'S PASSWORD>
-<YOUR DEFAULT AD PASSWORD FOR PAM-USERS>
-<YOUR.DOMAIN1.LOCAL>|<DOMAIN'S DC IP>
-<YOUR.DOMAIN2.LOCAL>|<DOMAIN'S DC IP>
-```
+<code | download>
+https://<FUDO-MANAGEMENT-SITE>
+<FUDO BIND IP FOR SERVERS>
+<FUDO API KEY>
+<DEFAULT AD PASSWORD FOR PAM-USER MUST BE CHANGED BY CHANGERS>
+<SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
+<SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
+<SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
+<SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
+<SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
+</code>
 
-Domains info will be used in dcs dict in project_static.py - check it carefully.
+  * **SCOPE MARK**, for example might be **PCIDSS**
+  * **DOMAIN SHORT NAME**, for exmaple might be **DOM1** if you have **domain1.example.com** domain
+  * **DOMAIN FQDN**, for example might be **domain1.example.com**
+  * **DC IP**, your domain's **Domain Controller's IP**
+
+For scope section I personally need all five scopes. If you have less or more - edit code in **project_static.py** under **# PARSING DATA FILE FOR BASE URL, USER, PASSWORD** comment(**dcs** dict).
 
 # data_files/mailing_data.json - mailing data
+
+Rename BLANK_mailing_data.json to mailing_data.json to use in script!
+
 ```
 {
   "smtp_server": "<YOUR SMTP SERVER>",
