@@ -78,10 +78,12 @@ with open(mailing_data, encoding='utf-8') as file:
 # VA PROJECT REGARDING DATA
 
 # SERVERS FILES
-servers_file = f'{data_files}/PKI.csv'
+# servers_file = f'{data_files}/KIA(PCI)_plus_NESTEROM.csv'
+servers_file = f'{data_files}/TSOIB-Systems_TEST.csv'
+
 
 # OPERATORS FILE
-operators_file = f'{data_files}/Operators.csv'
+operators_file = f'{data_files}/Operators-TEST-1.csv'
 
 # CONNECTION DATA
 data_file = f'{data_files}/con-data'
@@ -91,36 +93,26 @@ with open(data_file, 'r') as file:
     data = [string.strip() for string in file.readlines() if len(string) > 0]
     fudo_base_url = data[0]
     fudo_bind_ip = data[1]
-
-    # USERNAME & PASSWORD DEPRECATED IN FUDO 5.4, USE API KEY
-    # fudo_auth_creds = {
-    #     'username': data[2],
-    #     'password': data[3]
-    # }
-
     fudo_api_key = data[2]
     acc_pwd = data[3]
-    # zone: dc-ip
+
+    # scope: [changer_zone, domain, dc-ip]
     dcs = {
-        'DOMAIN1': data[4].split('|'),
-        'DOMAIN2': data[5].split('|'),
-        'DOMAIN3': data[6].split('|'),
-        'DOMAIN4': data[7].split('|'),
+        data[4].split('|')[0]: data[4].split('|')[1:],
+        data[5].split('|')[0]: data[5].split('|')[1:],
+        data[6].split('|')[0]: data[6].split('|')[1:],
+        data[7].split('|')[0]: data[7].split('|')[1:],
+        data[8].split('|')[0]: data[8].split('|')[1:]
     }
 
-# USERNAME & PASSWORD DEPRECATED IN FUDO 5.4, USE API AUTH
-fudo_auth_creds = {
-    'username': '<api-user?',
-    'password': '<password>'
-}
 fudo_headers = {
     'Content-Type': 'application/json'
 }
 
 # FUDO API AUTH
-# fudo_auth_headers = {
-#     'Authorization': fudo_api_key
-# }
+fudo_auth_headers = {
+    'Authorization': fudo_api_key
+}
 
 # FUDO REQUESTS DATA ###
 fudo_proxies = {
@@ -129,8 +121,8 @@ fudo_proxies = {
 }
 
 # FUDO URL PARAMETERES
-common_url_parameters = '?fields=id,name'
-server_url_parameters = '?fields=id,name,address,protocol'
+server_url_parameters = '?fields=id,name,address,protocol,description'
+account_url_parameters = '?fields=id,name,server_id,ocr_enabled'
 
 # FUDO URLS
 
@@ -138,17 +130,19 @@ server_url_parameters = '?fields=id,name,address,protocol'
 fudo_auth_url = f'{fudo_base_url}/api/system/login'
 
 fudo_server_url = f'{fudo_base_url}/api/v2/server{server_url_parameters}'
-fudo_account_url = f'{fudo_base_url}/api/v2/account{common_url_parameters}'
-fudo_safe_url = f'{fudo_base_url}/api/v2/safe{common_url_parameters}'
-fudo_user_url = f'{fudo_base_url}/api/v2/user{common_url_parameters}'
-fudo_pools_url = f'{fudo_base_url}/api/v2/pool{common_url_parameters}'
-fudo_listener_url = f'{fudo_base_url}/api/v2/listener{common_url_parameters}'
+fudo_account_url = f'{fudo_base_url}/api/v2/account{account_url_parameters}'
+fudo_safe_url = f'{fudo_base_url}/api/v2/safe'
+fudo_user_url = f'{fudo_base_url}/api/v2/user'
+fudo_pools_url = f'{fudo_base_url}/api/v2/pool'
+fudo_listener_url = f'{fudo_base_url}/api/v2/listener'
 
 fudo_user_to_safe_assignment_url = f'{fudo_base_url}/api/v2/user/safe'
 fudo_account_safe_listener_url = f'{fudo_base_url}/api/v2/account/safe/listener'
 fudo_pools_server_url = f'{fudo_base_url}/api/v2/pool/server'
 
 fudo_modify_user_url = f'{fudo_base_url}/api/v2/user'
+fudo_modify_account_url = f'{fudo_base_url}/api/v2/account'
+fudo_modify_server_url = f'{fudo_base_url}/api/v2/server'
 
 fudo_grant_access_user_url = f'{fudo_base_url}/api/v2/grant/user'
 fudo_grant_access_safe_url = f'{fudo_base_url}/api/v2/grant/safe'
