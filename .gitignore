@@ -1,6 +1,8 @@
 *
 
-!app_scripts
+!app_scripts/project_helper.py
+!app_scripts/project_mailing.py
+!app_scripts/fudo_functions.py
 !data_files/BLANK_con-data
 !data_files/BLANK_mailing_data.json
 !.gitignore

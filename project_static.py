@@ -78,12 +78,10 @@ with open(mailing_data, encoding='utf-8') as file:
 # VA PROJECT REGARDING DATA
 
 # SERVERS FILES
-# servers_file = f'{data_files}/KIA(PCI)_plus_NESTEROM.csv'
-servers_file = f'{data_files}/TSOIB-Systems_TEST.csv'
-
+servers_file = f'{data_files}/Scopes.csv'
 
 # OPERATORS FILE
-operators_file = f'{data_files}/Operators-TEST-1.csv'
+operators_file = f'{data_files}/Operators.csv'
 
 # CONNECTION DATA
 data_file = f'{data_files}/con-data'
