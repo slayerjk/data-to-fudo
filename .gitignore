@@ -1,13 +1,17 @@
+# ignore all
 *
 
-!app_scripts/project_helper.py
+# except
+!app_scripts/app_functions.py
 !app_scripts/project_mailing.py
-!app_scripts/fudo_functions.py
-!data_files/BLANK_con-data
+!app_scripts/project_helper.py
+
 !data_files/BLANK_mailing_data.json
-!.gitignore
+!data_files/BLANK_data.json
+
+!app.py
 !project_static.py
+
+!.gitignore
+!README.md
 !requirements.txt
-!set_operators.py
-!set_srv-pool-acc-safe.py
-!logs/*
