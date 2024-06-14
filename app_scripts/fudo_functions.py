@@ -6,11 +6,10 @@ from project_static import logging, fudo_bind_ip
 
 
 # FUNCTION: GETTING FUDO DATA
-def get_fudo_data(url, headers, proxies) -> bool:
+def get_fudo_data(url, headers, proxies) -> None:
     resp = requests.get(url, headers=headers, proxies=proxies, verify=False)
     if resp.status_code not in (200, 201):
         raise Exception(f'FAILED TO GET FUDO DATA:{resp.status_code}\n{resp.url}\n{resp.text}')
-    return True
 
 
 # FUNCTION: SEND DATA TO FUDO
@@ -98,8 +97,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 if len(proto_data) == 0:
                     continue
                 else:
-                    server_data['description'] = f'{row[2]}; {row[1]}'
-                    server_data['address'] = server_ip
+                    server_data['description'] = f'{row[2].strip()}; {row[1].strip()}'
+                    server_data['address'] = server_ip.strip()
                     server_data['bind_ip'] = fudo_bind_ip
 
                     if ind == 0:  # SSHs
@@ -115,7 +114,7 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         server_data['tls_enabled'] = True
                         if not proto_data[1]:
                             raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
-                        users = [i.replace(',', '') for i in row[6].split()]
+                        users = [i.replace(',', '').strip() for i in row[6].split()]
                     elif ind == 2:  # HTTP
                         server_data['protocol'] = protocols[2]
                         server_data['port'] = 443
@@ -136,8 +135,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 pool_data = dict()
 
                 pool_data['name'] = server_data['name']
-                pool_data['pool_mark'] = row[4]
-                pool_data['scope'] = row[0]
+                pool_data['pool_mark'] = row[4].strip()
+                pool_data['scope'] = row[0].strip()
                 pool_data['address'] = server_data['address']
 
                 temp['pool_data'] = pool_data
@@ -168,16 +167,38 @@ def parse_n_set_server_data(input_file: bytes) -> list:
 
 
 # CREATE SAFE
-def create_fudo_safe(safe_url: str, proxies: dict, headers: dict, user: str) -> bool:
+def create_fudo_safe(safe_url: str, user_url: str, us_url: str, proxies: dict, headers: dict, user: str) -> None:
     """
     Create FUDO Safe based on parsed data created by parse_n_set_server_data
-    Skip if safe is already created.
+    Create User to Safe assignment
 
     :param safe_url: str, FUDO API Save URL
+    :param user_url: str, FUDO API User URL
+    :param us_url: str, FUDO API User to Safe assignment URL
     :param proxies: dict, proxies
     :param headers: dict, headers(AUTH)
     :param user: str, list of users to create safe
     """
+    # getting user id
+    try:
+        user_resp = requests.get(
+            f'{user_url}?filter=name.eq({user})',
+            headers=headers,
+            proxies=proxies,
+            verify=False
+        )
+    except Exception as e:
+        raise Exception(e)
+
+    if user_resp.status_code != 200:
+        raise Exception(f'FAILED TO GET USER ID\n{user_resp.status_code}\n, {user_resp.url}\n, {user_resp.text}')
+    else:
+        try:
+            user_id = user_resp.json()['user'][0]['id']
+        except Exception as e:
+            raise Exception(f'FAILED TO FIND USER DATA IN API: {user}\n{e}')
+
+    # creating safe
     safe_data = {
         "name": f"SAFE-{user}",
         "inactivity_limit": 30,
@@ -187,10 +208,21 @@ def create_fudo_safe(safe_url: str, proxies: dict, headers: dict, user: str) -> 
         "vnc_clipsrv": False
     }
 
-    check_exist = None
-
+    create_resp = None
     try:
-        check_exist = requests.get(
+        create_resp = requests.post(safe_url, proxies=proxies, headers=headers, verify=False, json=safe_data)
+    except Exception:
+        raise Exception(
+            f'FAILED TO CREATE SAFE{user}:\n{create_resp.status_code}\n{create_resp.text}'
+        )
+    else:
+        if create_resp.status_code not in (200, 201):
+            raise Exception(create_resp.text)
+
+    # getting safe id
+    safe_resp = None
+    try:
+        safe_resp = requests.get(
             f'{safe_url}?filter=name.eq(SAFE-{user})',
             proxies=proxies,
             headers=headers,
@@ -198,26 +230,30 @@ def create_fudo_safe(safe_url: str, proxies: dict, headers: dict, user: str) -> 
         )
     except Exception:
         raise Exception(
-            f'FAILED TO CHECK IF SAFE ALREADY EXIST({user}):\n{check_exist.status_code}\n{check_exist.text}'
+            f'FAILED TO GET SAFE{user}:\n{safe_resp.status_code}\n{safe_resp.text}'
         )
     else:
-        if check_exist.status_code not in (200, 201):
-            raise Exception(check_exist.text)
-
-        if check_exist.json()['safe']:
-            raise Exception('SAFE IS ALREADY EXISTS!')
+        if safe_resp.status_code not in (200, 201):
+            raise Exception(safe_resp.text)
         else:
-            # creating safe
-            try:
-                create_resp = requests.post(safe_url, proxies=proxies, headers=headers, verify=False, json=safe_data)
-            except Exception:
-                raise Exception(
-                    f'FAILED TO CREATE SAFE{user}:\n{check_exist.status_code}\n{check_exist.text}'
-                )
-            else:
-                if create_resp.status_code not in (200, 201):
-                    raise Exception(create_resp.text)
-    return True
+            safe_id = safe_resp.json()['safe'][0]['id']
+
+    # try to make User to Safe assignment
+    logging.info(f'STARTED: assigning {user} to {safe_data["name"]}')
+    us_data = {
+            "user_id": user_id,
+            "safe_id": safe_id
+        }
+
+    try:
+        us_resp = requests.post(us_url, proxies=proxies, headers=headers, verify=False, json=us_data)
+    except Exception as e:
+        logging.error(f'FAILED: assigning {user} to {safe_data["name"]}:\n{e}')
+    else:
+        if us_resp.status_code not in (200, 201):
+            raise Exception(f'{us_resp.status_code}\n{us_resp.text}')
+
+    logging.info(f'DONE: assigning {user} to {safe_data["name"]}')
 
 
 # FUNCTION: ENRICH SERVER DATA
@@ -256,12 +292,12 @@ def enrich_data(
     if server_resp.status_code == 200:
         try:
             server_id = server_resp.json()['server'][0]['id']
-        except Exception:
-            raise Exception(f'FAILED TO FIND SERVER\'S ID, skip this server')
+        except Exception as e:
+            logging.warning(f'FAILED TO FIND SERVER\'S ID, skip this server({server_data["name"]}):\n{e}')
         else:
             server_data['server_id'] = server_id
     else:
-        raise Exception(f'FAILED TO GET SERVER INFO\n{server_resp.status_code}\n, '
+        logging.warning(f'FAILED TO GET SERVER INFO\n{server_resp.status_code}\n, '
                         f'{server_resp.url}\n, {server_resp.text}')
     # response = requests
 
@@ -411,7 +447,7 @@ def enrich_data(
         ...}]
     ...
     """
-    # trying to get user_id
+    # # trying to get user_id
     for user in user_data:
         user_resp = requests.get(
             f'{user_url}?filter=name.eq({user["name"]})',
@@ -459,7 +495,7 @@ def assign_server_to_pool(
         proxies: dict,
         headers: dict,
         parsed_data: dict
-) -> bool:
+) -> None:
     """
         Assign Server to Pool based on enriched data created by
         Skip if safe is already created.
@@ -486,8 +522,6 @@ def assign_server_to_pool(
     else:
         if resp.status_code not in (200, 201):
             raise Exception(f'{resp.status_code}\n{resp.text}')
-
-    return True
 
 
 # CREATE ACCOUNTS
@@ -658,50 +692,28 @@ def create_accounts(
 
 # CREATE USER TO SAFE ASSINMENT & ACCOUNT, LISTENER TO SAFE ASSIGNMENT
 def assign_data_to_safe(
-        us_url: str,
+        # us_url: str,
         als_url: str,
         proxies: dict,
         headers: dict,
         parsed_data: dict,
-) -> bool:
+) -> None:
     """
-    Creates User to Safe assignment
-    Then create Accounts-Listeners to Safe assignment
+    Create Accounts-Listeners to Safe assignment
 
     !Changers Servers must exist! example to search S_CHANGER-<SCOPE>_LDAPS_<DC IP>
 
-    :param us_url: str, FUDO API USER TO SAFE URL
+    #:param us_url: str, FUDO API USER TO SAFE URL
     :param als_url: str, FUDO API ACCOUNT-LISTENER TO SAFE URL
     :param proxies: dict, proxies
     :param headers: dict, headers(AUTH)
     :param parsed_data: dict, one obj of parsed data
     """
-    # first try to make User to Safe assignment
+    # trying to make Account-Listener to Safe assingment
     listener_name = parsed_data['server_data']['listener_name']
     listener_id = parsed_data['server_data']['listener_id']
 
     for user in parsed_data['user_data']:
-        logging.info(f'STARTED: assigning {user["name"]} to {user["safe_name"]}')
-        us_data = {
-            "user_id": user['user_id'],
-            "safe_id": user['safe_id']
-        }
-
-        try:
-            us_resp = requests.post(us_url, proxies=proxies, headers=headers, verify=False, json=us_data)
-        except Exception as e:
-            logging.error(f'FAILED: assigning {user["name"]} to {user["safe_name"]}:\n{e}')
-            continue
-        else:
-            if us_resp.status_code not in (200, 201):
-                logging.error(
-                    f'FAILED: assigning {user["name"]} to {user["safe_name"]}:\n{us_resp.status_code}\n{us_resp.text}'
-                )
-                continue
-        logging.info(f'DONE: assigning {user["name"]} to {user["safe_name"]}')
-
-    for user in parsed_data['user_data']:
-        # trying to make Account-Listener to Safe assingment
         logging.info(
             f'STARTED: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}')
 
@@ -726,8 +738,6 @@ def assign_data_to_safe(
                 continue
         logging.info(
             f'DONE: assigning {user["account_name"]} and {listener_name} to {user["safe_name"]}')
-
-    return True
 
 
 # PARSE DATA FROM OPERATORS FILE

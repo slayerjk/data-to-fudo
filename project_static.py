@@ -100,7 +100,8 @@ with open(data_file, 'r') as file:
         data[5].split('|')[0]: data[5].split('|')[1:],
         data[6].split('|')[0]: data[6].split('|')[1:],
         data[7].split('|')[0]: data[7].split('|')[1:],
-        data[8].split('|')[0]: data[8].split('|')[1:]
+        data[8].split('|')[0]: data[8].split('|')[1:],
+        data[9].split('|')[0]: data[8].split('|')[1:],
     }
 
 fudo_headers = {

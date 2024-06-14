@@ -124,6 +124,8 @@ temp_succeeded.clear()
 temp_failed.clear()
 
 # CREATING SAFES
+
+
 logging.info('STARTED: creating Fudo Safes\n')
 # get all distinct users for safes from parsed data
 users_for_safes = set(user['name'] for obj in parsed_data for user in obj['user_data'])
@@ -132,10 +134,17 @@ total_set_safes = len(users_for_safes)
 for user in users_for_safes:
     logging.info(f'STARTED: creating safe for {user}')
     try:
-        create_fudo_safe(fudo_safe_url, fudo_proxies, fudo_auth_headers, user)
+        create_fudo_safe(
+            fudo_safe_url,
+            fudo_user_url,
+            fudo_user_to_safe_assignment_url,
+            fudo_proxies,
+            fudo_auth_headers,
+            user
+        )
     except Exception as e:
         temp_failed.append(user)
-        logging.error(f'\nFAILED: Ccreating safe for {user}:\n{e}')
+        logging.error(f'\nFAILED: Creating safe for {user}:\n{e}')
     else:
         temp_succeeded.append(user)
         logging.info(f'{user} - created!')
@@ -155,8 +164,6 @@ if len(temp_succeeded) > 0:
         logging.info(safe)
 logging.info('\nDONE: JOB REPORT - CREATE SAFE\n')
 
-temp_succeeded.clear()
-temp_failed.clear()
 
 # ENRICH PARSED DATA
 temp = []
@@ -173,6 +180,9 @@ temp.clear()
 
 
 # ASSIGN SERVER TO POOL
+temp_succeeded.clear()
+temp_failed.clear()
+
 logging.info('STARTED: assigning Server to Pool(ASP)\n')
 for obj in parsed_data:
     try:
@@ -233,7 +243,6 @@ for obj in parsed_data:
 # CREATE DATA TO SAFE ASSIGNMENT
 for obj in parsed_data:
     assign_data_to_safe(
-        fudo_user_to_safe_assignment_url,
         fudo_account_safe_listener_url,
         fudo_proxies,
         fudo_auth_headers,
