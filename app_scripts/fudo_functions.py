@@ -570,12 +570,6 @@ def create_accounts(
         changer_zone = dcs[parsed_data['pool_data']['scope']][0]
         pattern = f'S_CHANGER-({changer_zone})_.*'
 
-        # if user['changer'] == 'INV':
-        #     print(user)
-        #     print(parsed_data['pool_data'])
-        #     print(changer_zone)
-        #     print(dcs)
-
         for changer in changers:
             changer_zone_match = re.match(pattern, changer['name'])
 
