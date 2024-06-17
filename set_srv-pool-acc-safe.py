@@ -172,6 +172,7 @@ enrich_urls = [fudo_server_url, fudo_listener_url, fudo_pools_url, fudo_user_url
 for obj in parsed_data:
     temp.append(enrich_data(*enrich_urls, fudo_auth_headers, fudo_proxies, obj))
 
+logging.info('ENRICHED DATA:\n')
 for data in temp:
     logging.info(f'{data}\n')
 
@@ -191,7 +192,7 @@ for obj in parsed_data:
         temp_failed.append((obj['server_data']['name']))
         logging.error(f'\nFAILED: CREATING ASP({obj["server_data"]["name"]}), CHECK STATUS CODE/ERROR({e})\n')
     else:
-        temp_failed.append((obj['server_data']['name']))
+        temp_succeeded.append((obj['server_data']['name']))
         logging.info(f'{obj["server_data"]["name"]} - created!')
 logging.info('DONE: creating ASP\n')
 
@@ -215,7 +216,7 @@ temp_failed.clear()
 
 # CREATE ACCOUNTS
 for obj in parsed_data:
-    logging.info('STARTED: creating Accounts\n')
+    logging.info('STARTED: CREATING ACCOUNTS\n')
     try:
         logging.info(f'STARTED: creating Accounts for {obj["user_data"]}')
         result = create_accounts(
@@ -231,7 +232,7 @@ for obj in parsed_data:
         logging.error(f'FAILED: creating Accounts for {obj["user_data"]}:\n{e}\n')
     else:
         temp.append(result)
-        logging.info(f'DONE: creating Accounts\n')
+        logging.info(f'DONE: CREATING ACCOUNTS\n')
 
 parsed_data = temp.copy()
 temp.clear()

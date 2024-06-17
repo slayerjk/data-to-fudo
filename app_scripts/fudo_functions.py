@@ -465,7 +465,7 @@ def enrich_data(
                 raise Exception(f'FAILED TO FIND USER DATA IN API: {user["name"]}\n{e}')
 
         # set changer data
-        # user['changer'] parsed_data['pool_data']['scope']
+        user['changer'] = parsed_data['pool_data']['scope']
 
         # trying to get user's safe_id
         safe_resp = requests.get(
@@ -570,6 +570,12 @@ def create_accounts(
         changer_zone = dcs[parsed_data['pool_data']['scope']][0]
         pattern = f'S_CHANGER-({changer_zone})_.*'
 
+        # if user['changer'] == 'INV':
+        #     print(user)
+        #     print(parsed_data['pool_data'])
+        #     print(changer_zone)
+        #     print(dcs)
+
         for changer in changers:
             changer_zone_match = re.match(pattern, changer['name'])
 
@@ -582,6 +588,8 @@ def create_accounts(
                 continue
             else:
                 # create changer account
+                logging.info(f'STARTED: creating changer account: {user["changer"]}')
+
                 changer_acc_data = {
                     "name": f'A_CHANGER-{changer_zone}_PAM-{user["name"]}',
                     "type": "regular",
@@ -667,7 +675,7 @@ def create_accounts(
                 logging.info(f'DONE: CREATING REGULAR ACCOUNT NOW({user["account_name"]})')
 
         # get created account id
-        logging.info(f'Trying to get newly created account id({user["account_name"]})')
+        logging.info(f'STARTED: getting newly created account id({user["account_name"]})')
         try:
             acc_resp = requests.get(
                 f'{acc_url}&filter=name.eq({user["account_name"]})',
@@ -684,7 +692,7 @@ def create_accounts(
                     f'ERROR({user["account_name"]}):\n{create_acc_resp.status_code}\n{create_acc_resp.text}\n'
                 )
             else:
-                logging.info(f'DONE: GETTING REGULAR ACCOUNT ({user["account_name"]})')
+                logging.info(f'DONE: getting newly created account id({user["account_name"]})')
                 user['account_id'] = acc_resp.json()['account'][0]['id']
 
     return parsed_data

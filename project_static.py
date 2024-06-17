@@ -78,7 +78,8 @@ with open(mailing_data, encoding='utf-8') as file:
 # VA PROJECT REGARDING DATA
 
 # SERVERS FILES
-servers_file = f'{data_files}/Scopes.csv'
+# servers_file = f'{data_files}/Scopes.csv'
+servers_file = f'{data_files}/TEST-DATA-1.csv'
 
 # OPERATORS FILE
 operators_file = f'{data_files}/Operators.csv'
@@ -101,7 +102,7 @@ with open(data_file, 'r') as file:
         data[6].split('|')[0]: data[6].split('|')[1:],
         data[7].split('|')[0]: data[7].split('|')[1:],
         data[8].split('|')[0]: data[8].split('|')[1:],
-        data[9].split('|')[0]: data[8].split('|')[1:],
+        data[9].split('|')[0]: data[9].split('|')[1:],
     }
 
 fudo_headers = {
