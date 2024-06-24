@@ -9,8 +9,8 @@ Script is aumtomatization of:
  - Adding Servers/Accounts/Safes to Fudo based on corresponding CSV data file:
    -  Creating Servers
    -  Adding Servers to Pools(must be created manually)
-   -  Creating Accounts
-   -  Creating Password Changers Accounts(Changer Servers(DC) must be added manually)
+   -  Creating Accounts; like "A_PAM-<USER>_<PROTOCOL>_<IP>"
+   -  Creating Password Changers Accounts(Changer Servers(DC) must be added manually) like "A_CHANGER-<DOM>_PAM-<USER>"
    -  Creating Safes
    -  Assign Users to Safes(Users must be added previously)
    -  Assign Listeners to Safes
@@ -77,7 +77,7 @@ USER2, USER3 USER4 USER5
 
 Rename BLANK_con-data to con-data to use in script!
 
-<code | download>
+```
 https://<FUDO-MANAGEMENT-SITE>
 <FUDO BIND IP FOR SERVERS>
 <FUDO API KEY>
@@ -87,7 +87,7 @@ https://<FUDO-MANAGEMENT-SITE>
 <SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
 <SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
 <SCOPE MARK>|<DOMAIN SHORT MARK>|<DOMAIN FQDN>|<DC IP>
-</code>
+```
 
   * **SCOPE MARK**, for example might be **PCIDSS**
   * **DOMAIN SHORT NAME**, for exmaple might be **DOM1** if you have **domain1.example.com** domain
