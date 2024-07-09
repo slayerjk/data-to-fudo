@@ -93,7 +93,7 @@ For example, DOM1|SCOPE1|dom1.ex.com|10.x.x.x:
 
 will be created 
    * password changer account: A_CHANGER-DOM1_PAM-<USER>_10.x.x.x
-     * account for server: A_PAM-<USER>_<PROTOCOL>_<SRV IP>
+   * account for server: A_PAM-<USER>_<PROTOCOL>_<SRV IP>
 
 for <LOCAL>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>:
    * changer account: NA
