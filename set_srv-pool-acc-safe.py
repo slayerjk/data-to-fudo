@@ -90,7 +90,6 @@ for server in parsed_data:
 
 total_parsed_servers = len(parsed_data)
 
-exit()
 
 # CREATING SERVERS
 logging.info('STARTED: creating Fudo servers\n')
@@ -124,8 +123,8 @@ logging.info('\nDONE: JOB REPORT - CREATE SERVER\n')
 temp_succeeded.clear()
 temp_failed.clear()
 
-# CREATING SAFES
 
+# CREATING SAFES
 
 logging.info('STARTED: creating Fudo Safes\n')
 # get all distinct users for safes from parsed data

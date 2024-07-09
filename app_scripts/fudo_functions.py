@@ -52,7 +52,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 'description': 'eset-edr.xxx.org; Windows Server 2022',
                 'address': '10.x.x.x',
                 'bind_ip': '10.x.x.x',
-                'auth': 'AUTH'
                 'protocol': 'rdp',
                 'port': 3389,
                 'rdp_nla_enabled': True,
@@ -104,10 +103,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                     server_data['address'] = server_ip.strip()
                     server_data['bind_ip'] = fudo_bind_ip
 
-                    server_data['auth'] = row[1]
-                    if not server_data['auth']:
-                        raise Exception(f'NO AUTH DOMAIN FOUND FOR {row[4]}, FIX FIRST!')
-
                     if ind == 0:  # SSHs
                         server_data['protocol'] = protocols[0]
                         server_data['port'] = 22
@@ -150,6 +145,10 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 pool_data['scope'] = row[0].strip()
                 pool_data['address'] = server_data['address']
 
+                pool_data['auth'] = row[1].strip()
+                if not pool_data['auth']:
+                    raise Exception(f'NO AUTH DOMAIN FOUND FOR {row[4]}, FIX FIRST!')
+
                 temp['pool_data'] = pool_data
 
                 # USER DATA
@@ -161,7 +160,7 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                     }
 
                     acc_prefix = ''
-                    if server_data['auth'].strip().upper() == 'LOCAL':
+                    if pool_data['auth'].strip().upper() == 'LOCAL':
                         acc_prefix = 'A_L-PAM-'
                     else:
                         acc_prefix = 'A_PAM-'
@@ -451,10 +450,9 @@ def enrich_data(
     User data example:
     'user_data':
                 [
-                    {'name': 'MELIKHOD',
-                    'account_name': 'A_PAM-MELIKHOD_RDP_10.15.116.40'},
-                    {'name': 'PRASSOLA', 'account_name': 'A_PAM-PRASSOLA_RDP_10.15.116.40'},
-                    {'name': 'LIVITALI', 'account_name': 'A_PAM-LIVITALI_RDP_10.15.116.40'}
+                    {'name': 'USER1', 'account_name': 'A_PAM-USER1_RDP_10.x.x.x'},
+                    {'name': 'USER2', 'account_name': 'A_PAM-USER2_RDP_10.x.x.x'},
+                    {'name': 'USER3', 'account_name': 'A_PAM-USER3_RDP_10.x.x.x'}
                 ]
                 
     User response example:
