@@ -82,12 +82,23 @@ https://<FUDO-MANAGEMENT-SITE>
 <FUDO BIND IP FOR SERVERS>
 <FUDO API KEY>
 <DEFAULT AD PASSWORD FOR PAM-USER MUST BE CHANGED BY CHANGERS>
-<DOMAIN SHORT MARK>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
+<LOCAL>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
 <DOMAIN SHORT MARK>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
 <DOMAIN SHORT MARK>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
 <DOMAIN SHORT MARK>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
 <DOMAIN SHORT MARK>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>
 ```
+
+For example, DOM1|SCOPE1|dom1.ex.com|10.x.x.x:
+
+will be created 
+   * password changer account: A_CHANGER-DOM1_PAM-<USER>_10.x.x.x
+     * account for server: A_PAM-<USER>_<PROTOCOL>_<SRV IP>
+
+for <LOCAL>|<SCOPE MARK>|<DOMAIN FQDN>|<DC IP>:
+   * changer account: NA
+   * account for server: A_L-PAM-<USER>_<PROTOCOL>_<SRV IP>
+
 
   * **SCOPE MARK**, for example might be **PCIDSS**
   * **DOMAIN SHORT NAME**, for exmaple might be **DOM1** if you have **domain1.example.com** domain
