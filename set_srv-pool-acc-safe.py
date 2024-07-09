@@ -197,7 +197,7 @@ for obj in parsed_data:
 logging.info('DONE: creating ASP\n')
 
 
-# JOB REPORT: CREATE SERVER RESUME
+# JOB REPORT: CREATE ASP
 logging.info('STARTED: JOB REPORT - CREATE ASP:\n-----')
 if len(temp_failed) > 0:
     logging.warning(f'FAILED ASP TOTAL: {len(temp_failed)}/{total_parsed_servers}')
@@ -213,6 +213,7 @@ logging.info('\nDONE: JOB REPORT - CREATE ASP\n')
 
 temp_succeeded.clear()
 temp_failed.clear()
+
 
 # CREATE ACCOUNTS
 for obj in parsed_data:

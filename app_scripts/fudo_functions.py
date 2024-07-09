@@ -49,17 +49,17 @@ def parse_n_set_server_data(input_file: bytes) -> list:
     [
         {
             'server_data': {
-                'description': 'eset-edr.xxx.org; Windows Server 2022',
+                'description': 'edr.xxx.org; Windows Server 2022',
                 'address': '10.x.x.x',
                 'bind_ip': '10.x.x.x',
                 'protocol': 'rdp',
                 'port': 3389,
                 'rdp_nla_enabled': True,
                 'tls_enabled': True,
-                'name': 'API_S_BANK_RDP_10.x.x.x'
+                'name': 'API_S_SCOPE_RDP_10.x.x.x'
             },
             'pool_data': {
-                'name': 'API_S_SCOP_RDP_10.x.x.x',
+                'name': 'API_S_SCOPE_RDP_10.x.x.x',
                 'pool_mark': 'SW',
                 'scope': 'SCOPE',
                 'address': '10.x.x.x'
@@ -89,7 +89,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
             if not row[5]:
                 raise Exception(f'EMPTY SYSTEM TYPE COLUMN! CHECK {server_ip}')
 
-            # for ind, proto_data in enumerate(row[5:]):
             for ind, proto_data in enumerate(row[6:]):
                 server_data = dict()
                 temp = dict()
@@ -98,7 +97,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 if len(proto_data) == 0:
                     continue
                 else:
-                    # server_data['description'] = f'{row[2].strip()}; {row[1].strip()}'
                     server_data['description'] = f'{row[3].strip()}; {row[2].strip()}'
                     server_data['address'] = server_ip.strip()
                     server_data['bind_ip'] = fudo_bind_ip
@@ -108,7 +106,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         server_data['port'] = 22
                         if not proto_data[0]:
                             raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
-                        # users = [i.replace(',', '') for i in row[5].split()]
                         users = [i.replace(',', '') for i in row[6].split()]
                     elif ind == 1:  # RDP
                         server_data['protocol'] = protocols[1]
@@ -117,7 +114,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         server_data['tls_enabled'] = True
                         if not proto_data[1]:
                             raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
-                        # users = [i.replace(',', '').strip() for i in row[6].split()]
                         users = [i.replace(',', '').strip() for i in row[7].split()]
                     elif ind == 2:  # HTTP
                         server_data['protocol'] = protocols[2]
@@ -126,10 +122,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         server_data['http_password_element'] = '[id="password"]'
                         server_data['http_username_element'] = '[id="username"]'
                         server_data['http_signon_realm'] = f'https://{server_data["address"]}'
-                        # server_data['http_timeout'] = 900  # inactivity period, default value = 900 sec(15min)
                         if not proto_data[2]:
                             raise Exception(f'NO USERS FOR SERVER!({server_data["ip"]}({server_data["protocol"]})')
-                        # users = [i.replace(',', '') for i in row[7].split()]
                         users = [i.replace(',', '') for i in row[8].split()]
 
                     server_data['name'] = f'API_S_{row[0]}_{server_data["protocol"].upper()}_{server_ip}'
@@ -140,12 +134,11 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 pool_data = dict()
 
                 pool_data['name'] = server_data['name']
-                # pool_data['pool_mark'] = row[4].strip()
                 pool_data['pool_mark'] = row[5].strip()
                 pool_data['scope'] = row[0].strip()
                 pool_data['address'] = server_data['address']
 
-                pool_data['auth'] = row[1].strip()
+                pool_data['auth'] = row[1].strip().upper()
                 if not pool_data['auth']:
                     raise Exception(f'NO AUTH DOMAIN FOUND FOR {row[4]}, FIX FIRST!')
 
@@ -159,7 +152,6 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         'name': user,
                     }
 
-                    acc_prefix = ''
                     if pool_data['auth'].strip().upper() == 'LOCAL':
                         acc_prefix = 'A_L-PAM-'
                     else:
@@ -316,7 +308,6 @@ def enrich_data(
     else:
         logging.warning(f'FAILED TO GET SERVER INFO\n{server_resp.status_code}\n, '
                         f'{server_resp.url}\n, {server_resp.text}')
-    # response = requests
 
     # TRY TO GET LISTENERS DATA AND MATCH WITH SERVERS
     """
@@ -380,7 +371,7 @@ def enrich_data(
     """
     TRY TO FILTER SUCH POOL DATA(Example):
     
-    'pool_data': {'name': 'API_S_TEST_RDP_10.1.1.1', 'pool_mark': 'SW', 'scope': 'TEST', 'address': '10.1.1.1'}
+    'pool_data': {'name': 'API_S_TEST_RDP_10.x.x.x', 'pool_mark': 'SW', 'scope': 'TEST', 'address': '10.x.x.x'}
     SCOPE = TEST
     MARK = SW
     PROTO = RDP
@@ -481,7 +472,8 @@ def enrich_data(
                 raise Exception(f'FAILED TO FIND USER DATA IN API: {user["name"]}\n{e}')
 
         # set changer data
-        user['changer'] = parsed_data['pool_data']['scope']
+        # user['changer'] = parsed_data['pool_data']['scope']
+        user['changer'] = parsed_data['pool_data']['auth']
 
         # trying to get user's safe_id
         safe_resp = requests.get(
@@ -580,80 +572,83 @@ def create_accounts(
         else:
             changers = servers_resp.json()['server']
 
-    # creating corresponding changer account
-    for user in parsed_data['user_data']:
-        domain = dcs[parsed_data['pool_data']['scope']][1]
-        changer_zone = dcs[parsed_data['pool_data']['scope']][0]
-        pattern = f'S_CHANGER-({changer_zone})_.*'
+    # NO need to create changers for LOCAL accounts(skip for local)
+    if parsed_data['pool_data']['auth'] != 'LOCAL':
+        # creating corresponding changer account
+        for user in parsed_data['user_data']:
+            domain = dcs[parsed_data['pool_data']['auth']][1]
+            changer_zone = parsed_data['pool_data']['auth']
 
-        for changer in changers:
-            changer_zone_match = re.match(pattern, changer['name'])
+            pattern = f'S_CHANGER-({changer_zone})_.*'
 
-            try:
-                changer_zone_match_result = changer_zone_match.group(1)
-            except AttributeError:
-                continue
-
-            if changer_zone != changer_zone_match_result:
-                continue
-            else:
-                # create changer account
-                logging.info(f'STARTED: creating changer account: {user["changer"]}')
-
-                changer_acc_data = {
-                    "name": f'A_CHANGER-{changer_zone}_PAM-{user["name"]}',
-                    "type": "regular",
-                    "dump_mode": "all",
-                    "category": "privileged",
-                    "server_id": changer['id'],
-                    "domain": domain,
-                    "login": f'PAM-{user["name"]}',
-                    "method": "password",
-                    "secret": acc_pwd
-                }
-
-                user['changer'] = changer_acc_data['name']
-                user['domain'] = domain
+            for changer in changers:
+                changer_zone_match = re.match(pattern, changer['name'])
 
                 try:
-                    create_changer_resp = requests.post(
-                        acc_url,
-                        proxies=proxies,
-                        headers=headers,
-                        verify=False,
-                        json=changer_acc_data
-                    )
-                except Exception as e:
-                    # logging.warning(f'ERROR({user["changer"]}):\n{e}\n')
-                    raise Exception(f'ERROR({user["changer"]}):\n{e}\n')
+                    changer_zone_match_result = changer_zone_match.group(1)
+                except AttributeError:
+                    continue
+
+                if changer_zone != changer_zone_match_result:
+                    continue
                 else:
-                    if create_changer_resp.status_code not in (200, 201):
-                        logging.warning(
-                            f'ERROR({user["changer"]}):'
-                            f'\n{create_changer_resp.status_code}'
-                            f'\n{create_changer_resp.text}\n'
+                    # create changer account
+                    logging.info(f'STARTED: creating changer account: {user["changer"]}')
+                    changer_acc_data = {
+                        "name": f'A_CHANGER-{changer_zone}_PAM-{user["name"]}',
+                        "type": "regular",
+                        "dump_mode": "all",
+                        "category": "privileged",
+                        "server_id": changer['id'],
+                        "domain": domain,
+                        "login": f'PAM-{user["name"]}',
+                        "method": "password",
+                        "secret": acc_pwd
+                    }
+
+                    user['changer'] = changer_acc_data['name']
+                    user['domain'] = domain
+
+                    try:
+                        create_changer_resp = requests.post(
+                            acc_url,
+                            proxies=proxies,
+                            headers=headers,
+                            verify=False,
+                            json=changer_acc_data
                         )
-
-                logging.info(f'DONE creating changer account: {user["changer"]}\n')
-
-                # trying to get changer id
-                try:
-                    changer_resp = requests.get(
-                        f'{acc_url}&filter=name.eq({user["changer"]})',
-                        proxies=proxies,
-                        headers=headers,
-                        verify=False
-                    )
-                except Exception as e:
-                    # logging.warning(f'FAILED TO GET CHANGER ID({user["changer"]}):\n{e}\n')
-                    raise Exception(f'FAILED TO GET CHANGER ID({user["changer"]}):\n{e}\n')
-                else:
-                    if changer_resp.status_code not in (200, 201):
-                        logging.warning(f'ERROR({user["changer"]}):\n{changer_resp.status_code}\n{changer_resp.text}\n')
+                    except Exception as e:
+                        # logging.warning(f'ERROR({user["changer"]}):\n{e}\n')
+                        raise Exception(f'ERROR({user["changer"]}):\n{e}\n')
                     else:
-                        user['changer_id'] = changer_resp.json()['account'][0]['id']
+                        if create_changer_resp.status_code not in (200, 201):
+                            logging.warning(
+                                f'ERROR({user["changer"]}):'
+                                f'\n{create_changer_resp.status_code}'
+                                f'\n{create_changer_resp.text}\n'
+                            )
 
-            break
+                    logging.info(f'DONE creating changer account: {user["changer"]}\n')
+
+                    # trying to get changer id
+                    try:
+                        changer_resp = requests.get(
+                            f'{acc_url}&filter=name.eq({user["changer"]})',
+                            proxies=proxies,
+                            headers=headers,
+                            verify=False
+                        )
+                    except Exception as e:
+                        raise Exception(f'FAILED TO GET CHANGER ID({user["changer"]}):\n{e}\n')
+                    else:
+                        if changer_resp.status_code not in (200, 201):
+                            logging.warning(
+                                f'ERROR({user["changer"]}):\n{changer_resp.status_code}\n{changer_resp.text}\n'
+                            )
+                        else:
+                            user['changer_id'] = changer_resp.json()['account'][0]['id']
+
+                break
 
     for user in parsed_data['user_data']:
         # now trying to create usual account
@@ -667,14 +662,19 @@ def create_accounts(
             "server_id": parsed_data["server_data"]["server_id"],
             # "domain": domain,
             "login": f'PAM-{user["name"]}',
-            "method": "account",
-            "account_id": user["changer_id"]
         }
+
+        # SEPARATE DATA SET FOR LOCAL AND NON-LOCAL
+        if parsed_data['pool_data']['auth'] == 'LOCAL':
+            acc_data['method'] = "password"
+            acc_data['secret'] = acc_pwd
+        else:
+            acc_data['method'] = "account"
+            acc_data['account_id'] = user["changer_id"]
 
         try:
             create_acc_resp = requests.post(acc_url, proxies=proxies, headers=headers, verify=False, json=acc_data)
         except Exception as e:
-            # logging.warning(f'FAILED TO CREATE REGULAR ACCOUNT({user["account_name"]}):\n{e}')
             raise Exception(f'CHECK CREATE REGULAR ACCOUNT REQUEST({user["account_name"]}):\n{e}')
         else:
             if create_acc_resp.status_code not in (200, 201):
@@ -694,7 +694,6 @@ def create_accounts(
                 verify=False
             )
         except Exception as e:
-            # logging.warning(f'FAILED TO CREATE REGULAR ACCOUNT({user["account_name"]}):\n{e}')
             raise Exception(f'FAILED TO GET REGULAR ACCOUNT ID, check request({user["account_name"]}):\n{e}')
         else:
             if acc_resp.status_code not in (200, 201):
@@ -710,7 +709,6 @@ def create_accounts(
 
 # CREATE USER TO SAFE ASSINMENT & ACCOUNT, LISTENER TO SAFE ASSIGNMENT
 def assign_data_to_safe(
-        # us_url: str,
         als_url: str,
         proxies: dict,
         headers: dict,
