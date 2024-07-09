@@ -29,46 +29,47 @@ def parse_n_set_server_data(input_file: bytes) -> list:
     :return: list of parsed and enriched data
 
     ROWS of CSV:
-        1 Scope: your own definitons of scope/group of network segment/compliance
-        2 OS
-        3 Name(DNS)
-        4 IP
-        5 Device Type
+        1 Auth Domain: authentication domain(short name)
+        2 Scope: your own definitons of scope/group of network segment/compliance
+        3 OS
+        4 Name(DNS)
+        5 IP
+        6 Device Type
             SW-windows;
             SN-*nix;
             SC-storage control;
             SM-server management;
             ND-network device
-        6 User List for SSH - ("User1, User2, ...")
-        7 User List for RDP - ("User1, User2, ...")
-        6 User List for HTTP - ("User1, User2, ...")
+        7 User List for SSH - ("User1, User2, ...")
+        8 User List for RDP - ("User1, User2, ...")
+        9 User List for HTTP - ("User1, User2, ...")
 
     Return example:
     # SERVER DATA(RDP EXAMPLE
     [
         {
             'server_data': {
-                'description': 'eset-edr.bank.corp.centercredit.kz; Windows Server 2022',
-                'address': '10.15.116.40',
-                'bind_ip': '10.11.31.35',
+                'description': 'eset-edr.xxx.org; Windows Server 2022',
+                'address': '10.x.x.x',
+                'bind_ip': '10.x.x.x',
+                'auth': 'AUTH'
                 'protocol': 'rdp',
                 'port': 3389,
                 'rdp_nla_enabled': True,
                 'tls_enabled': True,
-                'name': 'API_S_BANK_RDP_10.15.116.40'
+                'name': 'API_S_BANK_RDP_10.x.x.x'
             },
             'pool_data': {
-                'name': 'API_S_BANK_RDP_10.15.116.40',
+                'name': 'API_S_SCOP_RDP_10.x.x.x',
                 'pool_mark': 'SW',
-                'scope': 'BANK',
-                'address': '10.15.116.40'
+                'scope': 'SCOPE',
+                'address': '10.x.x.x'
             },
             'user_data':
                 [
-                    {'name': 'MELIKHOD',
-                    'account_name': 'A_PAM-MELIKHOD_RDP_10.15.116.40'},
-                    {'name': 'PRASSOLA', 'account_name': 'A_PAM-PRASSOLA_RDP_10.15.116.40'},
-                    {'name': 'LIVITALI', 'account_name': 'A_PAM-LIVITALI_RDP_10.15.116.40'}
+                    {'name': 'USER1', 'account_name': 'A_PAM-USER1_RDP_10.x.x.x'},
+                    {'name': 'USER2', 'account_name': 'A_PAM-USER2_RDP_10.x.x.x'},
+                    {'name': 'USER3', 'account_name': 'A_PAM-USER3_RDP_10.x.x.x'}
                 ]
         }
         # ... OTHER IP-PROTOCOL DATA
@@ -82,14 +83,15 @@ def parse_n_set_server_data(input_file: bytes) -> list:
         protocols = ['ssh', 'rdp', 'http']
 
         for row in file_data:
-            server_ip = str(row[3].strip())
+            server_ip = str(row[4].strip())
 
             if not server_ip:
                 raise Exception(f'IP COLUMN IS EMPTY: {row}')
-            if not row[4]:
+            if not row[5]:
                 raise Exception(f'EMPTY SYSTEM TYPE COLUMN! CHECK {server_ip}')
 
-            for ind, proto_data in enumerate(row[5:]):
+            # for ind, proto_data in enumerate(row[5:]):
+            for ind, proto_data in enumerate(row[6:]):
                 server_data = dict()
                 temp = dict()
                 users = []
@@ -97,16 +99,22 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 if len(proto_data) == 0:
                     continue
                 else:
-                    server_data['description'] = f'{row[2].strip()}; {row[1].strip()}'
+                    # server_data['description'] = f'{row[2].strip()}; {row[1].strip()}'
+                    server_data['description'] = f'{row[3].strip()}; {row[2].strip()}'
                     server_data['address'] = server_ip.strip()
                     server_data['bind_ip'] = fudo_bind_ip
+
+                    server_data['auth'] = row[1]
+                    if not server_data['auth']:
+                        raise Exception(f'NO AUTH DOMAIN FOUND FOR {row[4]}, FIX FIRST!')
 
                     if ind == 0:  # SSHs
                         server_data['protocol'] = protocols[0]
                         server_data['port'] = 22
                         if not proto_data[0]:
                             raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
-                        users = [i.replace(',', '') for i in row[5].split()]
+                        # users = [i.replace(',', '') for i in row[5].split()]
+                        users = [i.replace(',', '') for i in row[6].split()]
                     elif ind == 1:  # RDP
                         server_data['protocol'] = protocols[1]
                         server_data['port'] = 3389
@@ -114,7 +122,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         server_data['tls_enabled'] = True
                         if not proto_data[1]:
                             raise Exception(f'NO USERS FILLED FOR SERVER!({server_data["name"]})')
-                        users = [i.replace(',', '').strip() for i in row[6].split()]
+                        # users = [i.replace(',', '').strip() for i in row[6].split()]
+                        users = [i.replace(',', '').strip() for i in row[7].split()]
                     elif ind == 2:  # HTTP
                         server_data['protocol'] = protocols[2]
                         server_data['port'] = 443
@@ -125,7 +134,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                         # server_data['http_timeout'] = 900  # inactivity period, default value = 900 sec(15min)
                         if not proto_data[2]:
                             raise Exception(f'NO USERS FOR SERVER!({server_data["ip"]}({server_data["protocol"]})')
-                        users = [i.replace(',', '') for i in row[7].split()]
+                        # users = [i.replace(',', '') for i in row[7].split()]
+                        users = [i.replace(',', '') for i in row[8].split()]
 
                     server_data['name'] = f'API_S_{row[0]}_{server_data["protocol"].upper()}_{server_ip}'
 
@@ -135,7 +145,8 @@ def parse_n_set_server_data(input_file: bytes) -> list:
                 pool_data = dict()
 
                 pool_data['name'] = server_data['name']
-                pool_data['pool_mark'] = row[4].strip()
+                # pool_data['pool_mark'] = row[4].strip()
+                pool_data['pool_mark'] = row[5].strip()
                 pool_data['scope'] = row[0].strip()
                 pool_data['address'] = server_data['address']
 
@@ -146,14 +157,21 @@ def parse_n_set_server_data(input_file: bytes) -> list:
 
                 for user in users:
                     user_data = {
-                        'name': user
+                        'name': user,
                     }
+
+                    acc_prefix = ''
+                    if server_data['auth'].strip().upper() == 'LOCAL':
+                        acc_prefix = 'A_L-PAM-'
+                    else:
+                        acc_prefix = 'A_PAM-'
+
                     if server_data['protocol'] == protocols[0]:  # SSH
-                        user_data['account_name'] = f'A_PAM-{user}_SSH_{server_ip}'
+                        user_data['account_name'] = f'{acc_prefix}{user}_SSH_{server_ip}'
                     elif server_data['protocol'] == protocols[1]:  # RDP
-                        user_data['account_name'] = f'A_PAM-{user}_RDP_{server_ip}'
+                        user_data['account_name'] = f'{acc_prefix}{user}_RDP_{server_ip}'
                     elif server_data['protocol'] == protocols[2]:  # HTTP
-                        user_data['account_name'] = f'A_PAM-{user}_HTTP_{server_ip}'
+                        user_data['account_name'] = f'{acc_prefix}{user}_HTTP_{server_ip}'
 
                     users_temp.append(user_data)
 

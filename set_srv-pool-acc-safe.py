@@ -90,6 +90,7 @@ for server in parsed_data:
 
 total_parsed_servers = len(parsed_data)
 
+exit()
 
 # CREATING SERVERS
 logging.info('STARTED: creating Fudo servers\n')
