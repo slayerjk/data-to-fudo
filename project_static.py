@@ -79,7 +79,6 @@ with open(mailing_data, encoding='utf-8') as file:
 
 # SERVERS FILES
 # servers_file = f'{data_files}/Scopes.csv'
-servers_file = f'{data_files}/TEST-DATA-1.csv'
 
 # OPERATORS FILE
 operators_file = f'{data_files}/Operators.csv'

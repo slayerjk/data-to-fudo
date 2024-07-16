@@ -294,7 +294,8 @@ def enrich_data(
 
     # TRY TO GET SERVER'S INFO
     server_resp = requests.get(
-        f'{server_url}&filter=name.eq({server_data["name"]})',
+        # f'{server_url}&filter=name.eq({server_data["name"]})',
+        f'{server_url}&filter=name.match({server_data["address"]}),protocol.eq({server_data["protocol"]})',
         headers=headers, proxies=proxies, verify=False
     )
 
